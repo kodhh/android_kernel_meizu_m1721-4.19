@@ -437,4 +437,10 @@ config MACH_XIAOMI_OXYGEN
 	  Support for the Xiaomi Max 2 platform
 	  which is based on QCOM MSM8953 chipset.
 
+config MACH_XIAOMI_MARKW
+	bool "MARKW board"
+	depends on ARCH_MSM8953
+	help
+	  This enables support for Xiaomi Redmi 4 Prime.
+
 endmenu
