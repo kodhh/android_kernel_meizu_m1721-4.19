@@ -3,3 +3,15 @@
 header-y += radio-iris.h
 header-y += radio-iris-commands.h
 header-y += synx.h
+header-y += msm_cam_sensor-markw.h
+header-y += msm_camera-markw.h
+header-y += msm_camsensor_sdk-markw.h
+header-y += msm_fd-markw.h
+header-y += msm_isp-markw.h
+header-y += msm_jpeg-markw.h
+header-y += msm_jpeg_dma-markw.h
+header-y += msmb_camera-markw.h
+header-y += msmb_generic_buf_mgr-markw.h
+header-y += msmb_isp-markw.h
+header-y += msmb_ispif-markw.h
+header-y += msmb_pproc-markw.h
