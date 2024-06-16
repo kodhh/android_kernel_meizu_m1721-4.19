@@ -562,9 +562,15 @@ static void msm_anlg_cdc_mbhc_internal_micbias_ctrl(
 {
 	if (micbias_num == 1) {
 		if (enable)
+#ifdef CONFIG_MACH_XIAOMI_MARKW
+			snd_soc_component_update_bits(component,
+				MSM89XX_PMIC_ANALOG_MICB_1_INT_RBIAS,
+				0x18, 0x18);
+#else
 			snd_soc_component_update_bits(component,
 				MSM89XX_PMIC_ANALOG_MICB_1_INT_RBIAS,
 				0x10, 0x10);
+#endif
 		else
 			snd_soc_component_update_bits(component,
 				MSM89XX_PMIC_ANALOG_MICB_1_INT_RBIAS,
@@ -2942,6 +2948,9 @@ static int msm_anlg_cdc_lo_dac_event(struct snd_soc_dapm_widget *w,
 			MSM89XX_PMIC_ANALOG_RX_LO_DAC_CTL, 0x08, 0x08);
 		snd_soc_component_update_bits(component,
 			MSM89XX_PMIC_ANALOG_RX_LO_DAC_CTL, 0x40, 0x40);
+#ifdef CONFIG_MACH_XIAOMI_MARKW
+		msleep(5);
+#endif
 		break;
 	case SND_SOC_DAPM_POST_PMU:
 		snd_soc_component_update_bits(component,
@@ -3345,6 +3354,9 @@ static int msm_anlg_cdc_codec_enable_lo_pa(struct snd_soc_dapm_widget *w,
 				       DIG_CDC_EVENT_RX3_MUTE_OFF);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
+#ifdef CONFIG_MACH_XIAOMI_MARKW
+		usleep_range(4000, 4100);
+#endif
 		msm_anlg_cdc_dig_notifier_call(component,
 				       DIG_CDC_EVENT_RX3_MUTE_ON);
 		break;
