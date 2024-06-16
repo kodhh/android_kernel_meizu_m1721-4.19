@@ -2672,7 +2672,7 @@ int gpiod_direction_output(struct gpio_desc *desc, int value)
 	else
 		value = !!value;
 
-#if !definded(CONFIG_TOUCHSCREEN_GT915L)
+#if !defined(CONFIG_TOUCHSCREEN_GT915L)
 	/* GPIOs used for IRQs shall not be set as output */
 	if (test_bit(FLAG_USED_AS_IRQ, &desc->flags)) {
 		gpiod_err(desc,
