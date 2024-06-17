@@ -2347,12 +2347,11 @@ s32 gup_update_proc(void *dir)
     }
     
     ret = gup_enter_update_judge(&fw_head);
-/* force to update original firmware
     if(FAIL == ret)
     {
         GTP_ERROR("[update_proc]Check *.bin file fail.");
         goto file_fail;
-    } */
+    }
     
     ts->enter_update = 1;
     gtp_irq_disable(ts);
