@@ -99,7 +99,6 @@
 			};
 		};
 
-/*
 		pm8953_gpios: gpios {
 			compatible = "qcom,spmi-gpio";
 			reg = <0xc000 0x800>;
@@ -118,8 +117,8 @@
 			#gpio-cells = <2>;
 			qcom,gpios-disallowed = <3 6>;
 		};
-*/
-		pm8953_gpios: gpios {
+
+/*		pm8953_gpios: gpios {
 			spmi-dev-container;
 			compatible = "qcom,qpnp-pin";
 			gpio-controller;
@@ -176,6 +175,7 @@
 				status = "disabled";
 			};
 		};
+*/
 
 		pm8953_vadc: vadc@3100 {
 			compatible = "qcom,qpnp-vadc";
