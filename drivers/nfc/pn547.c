@@ -466,7 +466,8 @@ static int pn547_probe(struct i2c_client *client,
 			goto err_clkreq_gpio;
 		}
 	} else {
-		dev_warn(&client->dev, "clkreq gpio not provided\n");
+		dev_err(&client->dev, "clkreq gpio not provided\n");
+		goto err_clk;
 	}
 
 	/* init mutex and queues */
@@ -553,6 +554,7 @@ err_irq:
 	misc_deregister(&pn547_dev->pn547_device);
 err_clkreq_gpio:
 	gpio_free(pn547_dev->clkreq_gpio);
+err_clk:
 err_parser:
 	kfree(pn547_dev);	
 
