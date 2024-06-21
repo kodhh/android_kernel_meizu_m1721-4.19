@@ -467,6 +467,9 @@ static int pn547_probe(struct i2c_client *client,
 		}
 	} else {
 		dev_err(&client->dev, "clkreq gpio not provided\n");
+		if(pn547_dev->clkreq_gpio == -EPROBE_DEFER)
+			/*gpios not initialized yet, deferring probe*/
+			ret = -EPROBE_DEFER;
 		goto err_clk;
 	}
 
