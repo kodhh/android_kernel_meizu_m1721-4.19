@@ -120,39 +120,6 @@ static s32 gtp_bak_ref_proc(struct goodix_ts_data *ts, u8 mode);
 #endif
 //********** For GT9XXF End **********//
 
-static bool disable_keys_function = false;
-
-static ssize_t proc_disable_keys_read(struct file *file, char __user *page, size_t count, loff_t *ppos)
-{
-	int num;
-	if (*ppos)
-		return 0;
-
-	const char c = disable_keys_function ? '1' : '0';
-	num = sprintf(page, "%c\n", c);
-	*ppos += num;
-	return num;
-}
-
-static ssize_t proc_disable_keys_write(struct file *file, const char __user *buffer, size_t count, loff_t *ppos)
-{
-	int i;
-
-	if (sscanf(buffer, "%u", &i) == 1 && i < 2) {
-		disable_keys_function = (i == 1);
-		return count;
-	} else {
-		return -EINVAL;
-	}
-}
-
-static const struct file_operations gt_disable_keys_proc_fops = {
-	.write = proc_disable_keys_write,
-	.read = proc_disable_keys_read,
-	.open = simple_open,
-	.owner = THIS_MODULE,
-};
-
 #if GTP_GESTURE_WAKEUP
 typedef enum
 {
@@ -216,64 +183,6 @@ static const struct file_operations gt_glove_onoff_proc_fops = {
 	.open = simple_open,
 	.owner = THIS_MODULE,
 };
-
-static struct device *tp_glove_dev;
-
-static ssize_t gt9xx_mido_gtp_glove_onoff_show(struct device *dev,
-        struct device_attribute *attr, char *buf)
-{
-        return sprintf(buf, "%c\n", gtp_glove_onoff);
-}
-
-static ssize_t gt9xx_mido_gtp_glove_onoff_store(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t size)
-{
-	struct goodix_ts_data *ts = NULL;
-
-	ts = dev_get_drvdata(dev);
-
-	if (ts->gtp_is_suspend)
-		return -EINVAL;
-
-	sscanf(buf, "%c",  &gtp_glove_onoff);
-	gtp_glove_support_flag_changed = 1;
-
-	if ('1' == gtp_glove_onoff) {
-		u8 cfg_group[] = CTP_CFG_GROUP1_GLOVE;
-		gtp_reset_guitar(i2c_connect_client, 50);
-		msleep(100);
-		memcpy(&gtp_glove_config[GTP_ADDR_LENGTH],  cfg_group, GTP_CONFIG_MAX_LENGTH);
-		gtp_send_glove_cfg(i2c_connect_client);
-	} else if ('0' == gtp_glove_onoff) {
-		gtp_reset_guitar(i2c_connect_client, 50);
-		msleep(100);
-		gtp_send_cfg(i2c_connect_client);
-	}
-
-	return size;
-}
-
-static DEVICE_ATTR(glove_enable, 0644, gt9xx_mido_gtp_glove_onoff_show, gt9xx_mido_gtp_glove_onoff_store);
-
-void gt9xx_tp_glove_register(struct goodix_ts_data *data)
-{
-	int rc = 0;
-	struct class *tp_device_class = NULL;
-	tp_device_class = class_create(THIS_MODULE, "tp_glove");
-	tp_glove_dev = device_create(tp_device_class, NULL, 0, NULL, "device");
-	if (IS_ERR(tp_glove_dev))
-		pr_err("Failed to create device(glove_ctrl)!\n");
-
-
-	rc = device_create_file(tp_glove_dev, &dev_attr_glove_enable);
-	if (rc < 0)
-		pr_err("Failed to create device file(%s)!\n", dev_attr_glove_enable.attr.name);
-	dev_set_drvdata(tp_glove_dev, data);
-
-	printk("~~~~~ %s enable!!!!!\n", __func__);
-
-}
 
 #endif
 
@@ -417,13 +326,12 @@ void Ctp_Gesture_Fucntion_Proc_File(void)
     struct proc_dir_entry *ctp_gesture_var_proc = NULL;
     struct proc_dir_entry *ctp_gesture_type_proc = NULL;
     struct proc_dir_entry *ctp_gesture_onoff_proc = NULL;
-	struct proc_dir_entry *ctp_disable_keys_proc = NULL;
     struct proc_dir_entry *ctp_glove_onoff_proc = NULL;
     struct proc_dir_entry *ctp_version_proc = NULL;
     struct proc_dir_entry *ctp_coordinate_proc = NULL;
 #define CTP_GESTURE_FUNCTION_AUTHORITY_PROC 0777
 
-    ctp_device_proc = proc_mkdir("touchpanel", NULL);
+    ctp_device_proc = proc_mkdir("touchscreen_feature", NULL);
 
     ctp_gesture_var_proc = proc_create("gesture_data", 0444, ctp_device_proc, &gt_gesture_var_proc_fops);
     if (ctp_gesture_var_proc == NULL)
@@ -437,19 +345,14 @@ void Ctp_Gesture_Fucntion_Proc_File(void)
         GTP_ERROR("ctp_gesture_type_proc create failed\n");
     }
 
-    ctp_gesture_onoff_proc = proc_create("enable_dt2w", 0666, ctp_device_proc, &gt_gesture_onoff_proc_fops);
+    ctp_gesture_onoff_proc = proc_create("gesture_onoff", 0666, ctp_device_proc, &gt_gesture_onoff_proc_fops);
     if (ctp_gesture_onoff_proc == NULL)
     {
         GTP_ERROR("ctp_gesture_onoff_proc create failed\n");
     }
 
-	ctp_disable_keys_proc = proc_create("capacitive_keys_disable", 0666, ctp_device_proc, &gt_disable_keys_proc_fops);
-	if (ctp_disable_keys_proc == NULL) {
-		 GTP_ERROR("ctp_disable_keys_proc create failed\n");
-	}
-
 #if GTP_GLOVE_MODE
-    ctp_glove_onoff_proc = proc_create("glove_enable", 0666, ctp_device_proc, &gt_glove_onoff_proc_fops);
+    ctp_glove_onoff_proc = proc_create("glove_onoff", 0666, ctp_device_proc, &gt_glove_onoff_proc_fops);
     if (ctp_glove_onoff_proc == NULL)
     {
         GTP_ERROR("ctp_gesture_onoff_proc create failed\n");
@@ -556,7 +459,7 @@ s32 gtp_i2c_write(struct i2c_client *client,u8 *buf,s32 len)
 {
     struct i2c_msg msg;
     s32 ret = -1;
-    s32 retries = 0;
+    //s32 retries = 0;
 
     GTP_DEBUG_FUNC();
 
@@ -566,38 +469,11 @@ s32 gtp_i2c_write(struct i2c_client *client,u8 *buf,s32 len)
     msg.buf   = buf;
     //msg.scl_rate = 300 * 1000;    // for Rockchip, etc
  
-    while(retries < 5)
-    {
-        ret = i2c_transfer(client->adapter, &msg, 1);
-        if (ret == 1)break;
-        retries++;
-    }
-    if((retries >= 5))
-    {
-    #if GTP_COMPATIBLE_MODE
-        struct goodix_ts_data *ts = i2c_get_clientdata(client);
-    #endif
-
-
-    #if GTP_GESTURE_WAKEUP
-        if (DOZE_ENABLED == doze_status)
-        {
-            return ret;
-        }
-    #endif
-        GTP_ERROR("I2C Write: 0x%04X, %d bytes failed, errcode: %d! Process reset.", (((u16)(buf[0] << 8)) | buf[1]), len-2, ret);
-    #if GTP_COMPATIBLE_MODE
-        if (CHIP_TYPE_GT9F == ts->chip_type)
-        { 
-            gtp_recovery_reset(client);
-        }
-        else
-    #endif
-        {
-            gtp_reset_guitar(client, 10);  
-        }
-    }
-    return ret;
+    ret = i2c_transfer(client->adapter, &msg, 1);
+    if (ret != 1)
+    {return -EINVAL;}
+    
+    return ret;	
 }
 
 
@@ -1322,7 +1198,7 @@ static void goodix_ts_work_func(struct work_struct *work)
     #endif
     
     #if GTP_HAVE_TOUCH_KEY
-		if (!pre_touch && !disable_keys_function)
+        if (!pre_touch)
         {
             for (i = 0; i < GTP_MAX_KEY_NUM; i++)
             {
@@ -2362,10 +2238,6 @@ else
     input_set_capability(ts->input_dev, EV_KEY, KEY_WAKEUP);//Modify,@wangdongbo.wt_20160602
     __set_bit(KEY_WAKEUP, ts->input_dev->keybit);
    Ctp_Gesture_Fucntion_Proc_File();
-#endif
-
-#if GTP_GLOVE_MODE
-	gt9xx_tp_glove_register(ts);
 #endif
 
 #if GTP_CHANGE_X2Y

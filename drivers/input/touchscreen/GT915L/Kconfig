@@ -1,5 +1,5 @@
 
 config TOUCHSCREEN_GT915L
-	tristate "Goodix GT915L touchpanel driver"
-	depends on INPUT_TOUCHSCREEN
+	bool "Goodix GT915L touchpanel driver"
+	depends on I2C
 	default n
