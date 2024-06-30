@@ -623,6 +623,8 @@ static int msm_vidc_probe_vidc_device(struct platform_device *pdev)
 	vidc_driver->capability_version =
 		msm_vidc_read_efuse_version(
 			pdev, core->resources.pf_cap_tbl, "efuse2");
+	if (vidc_driver->capability_version)
+		core->resources.target_version = 1;
 
 	rc = call_hfi_op(core->device, core_early_init,
 		core->device->hfi_device_data);
@@ -807,7 +809,7 @@ static int __init msm_vidc_init(void)
 	mutex_init(&vidc_driver->lock);
 	vidc_driver->debugfs_root = msm_vidc_debugfs_init_drv();
 	if (!vidc_driver->debugfs_root)
-		dprintk(VIDC_ERR,
+		dprintk(VIDC_DBG,
 			"Failed to create debugfs for msm_vidc\n");
 
 	rc = platform_driver_register(&msm_vidc_driver);
