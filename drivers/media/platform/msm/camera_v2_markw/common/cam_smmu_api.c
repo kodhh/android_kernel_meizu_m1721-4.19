@@ -855,7 +855,7 @@ static int cam_smmu_unmap_buf_and_remove_from_list(
 {
 	if ((!mapping_info->buf) || (!mapping_info->table) ||
 		(!mapping_info->attach)) {
-		pr_err("Error: Invalid params dev = %pK, table = %pK\n",
+		pr_err("Error: Invalid params dev = %pK, table = %pK",
 			(void *)iommu_cb_set.cb_info[idx].dev,
 			(void *)mapping_info->table);
 		pr_err("Error:dma_buf = %pK, attach = %pK\n",
@@ -1449,6 +1449,7 @@ static int cam_smmu_setup_cb(struct cam_context_bank_info *cb,
 		cb->va_start = SZ_128K;
 		cb->va_len = VA_SPACE_END - SZ_128K;
 	}
+
 	/* create a virtual mapping */
 	cb->domain = iommu_get_domain_for_dev(cb->dev);
 	if (IS_ERR(cb->domain)) {

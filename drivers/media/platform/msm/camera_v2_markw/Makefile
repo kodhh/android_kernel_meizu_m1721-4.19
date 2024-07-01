@@ -10,6 +10,8 @@ ccflags-y += -Idrivers/media/platform/msm/camera_v2_markw/jpeg_dma
 ccflags-y += -Idrivers/media/platform/msm/camera_v2_markw/fd
 ccflags-y += -Idrivers/media/platform/msm/camera_v2_markw/common
 
+ccflags-y += $(DISABLE_CFI_CLANG) $(DISABLE_LTO_CLANG)
+
 obj-$(CONFIG_MSMB_CAMERA) += common/
 obj-$(CONFIG_MSMB_CAMERA) += msm.o
 obj-$(CONFIG_MSMB_CAMERA) += camera/

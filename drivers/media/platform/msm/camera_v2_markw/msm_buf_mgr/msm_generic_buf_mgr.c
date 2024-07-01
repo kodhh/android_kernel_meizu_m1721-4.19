@@ -278,18 +278,17 @@ static void msm_buf_mngr_contq_listdel(struct msm_buf_mngr_device *dev,
 	int rc;
 	struct msm_buf_mngr_user_buf_cont_info *cont_bufs, *cont_save;
 
-	list_for_each_entry_safe_reverse(cont_bufs,
+	list_for_each_entry_safe(cont_bufs,
 		cont_save, &dev->cont_qhead, entry) {
 		if ((cont_bufs->sessid == session) &&
 		(cont_bufs->strid == stream)) {
-			if (cnt == 1 && unmap) {
+			if (cnt == 1 && unmap == 1) {
 				/* dma_buf_vunmap ignored vaddr(2nd argument) */
-				dma_buf_vunmap(cont_bufs->dmabuf,
-					cont_bufs->paddr);
+				dma_buf_vunmap(cont_bufs->dmabuf, NULL);
 				rc = dma_buf_end_cpu_access(cont_bufs->dmabuf,
 					DMA_BIDIRECTIONAL);
 				if (rc) {
-					pr_err("Failed in end cpu access, dmabuf=%pK\n",
+					pr_err("Failed in end cpu access, dmabuf=%pK",
 						cont_bufs->dmabuf);
 					return;
 				}
@@ -410,7 +409,7 @@ static int msm_buf_mngr_handle_cont_cmd(struct msm_buf_mngr_device *dev,
 		 */
 		rc = dma_buf_begin_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
 		if (rc) {
-			pr_err("dma begin access failed rc=%d\n", rc);
+			pr_err("dma begin access failed rc=%d", rc);
 			return rc;
 		}
 		iaddr = dma_buf_vmap(dmabuf);
@@ -470,7 +469,7 @@ free_list:
 	dma_buf_vunmap(dmabuf, iaddr);
 	rc = dma_buf_end_cpu_access(dmabuf, DMA_BIDIRECTIONAL);
 	if (rc) {
-		pr_err("Failed in end cpu access, dmabuf=%pK\n", dmabuf);
+		pr_err("Failed in end cpu access, dmabuf=%pK", dmabuf);
 		return rc;
 	}
 free_ion_handle:
@@ -884,11 +883,10 @@ static long msm_buf_subdev_fops_ioctl(struct file *file, unsigned int cmd,
 static int32_t __init msm_buf_mngr_init(void)
 {
 	int32_t rc = 0;
-
 	msm_buf_mngr_dev = kzalloc(sizeof(*msm_buf_mngr_dev),
 		GFP_KERNEL);
 	if (WARN_ON(!msm_buf_mngr_dev)) {
-		pr_err("%s: not enough memory\n", __func__);
+		pr_err("%s: not enough memory", __func__);
 		return -ENOMEM;
 	}
 	/* Sub-dev */
@@ -906,6 +904,8 @@ static int32_t __init msm_buf_mngr_init(void)
 	v4l2_set_subdevdata(&msm_buf_mngr_dev->subdev.sd, msm_buf_mngr_dev);
 
 	media_entity_pads_init(&msm_buf_mngr_dev->subdev.sd.entity, 0, NULL);
+	msm_buf_mngr_dev->subdev.sd.entity.group_id =
+			MSM_CAMERA_SUBDEV_BUF_MNGR;
 	msm_buf_mngr_dev->subdev.sd.entity.group_id =
 		MSM_CAMERA_SUBDEV_BUF_MNGR;
 	msm_buf_mngr_dev->subdev.sd.internal_ops =

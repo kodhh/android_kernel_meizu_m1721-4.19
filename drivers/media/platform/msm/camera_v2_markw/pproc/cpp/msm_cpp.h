@@ -227,6 +227,7 @@ struct cpp_device {
 	struct clk **cpp_clk;
 	struct msm_cam_clk_info *clk_info;
 	size_t num_clks;
+	struct reset_control *micro_iface_reset;
 	struct msm_cam_regulator *cpp_vdd;
 	int num_reg;
 	struct mutex mutex;
@@ -283,6 +284,8 @@ struct cpp_device {
 int msm_cpp_set_micro_clk(struct cpp_device *cpp_dev);
 int msm_update_freq_tbl(struct cpp_device *cpp_dev);
 int msm_cpp_get_clock_index(struct cpp_device *cpp_dev, const char *clk_name);
+int msm_cpp_get_regulator_index(struct cpp_device *cpp_dev,
+	const char *regulator_name);
 long msm_cpp_set_core_clk(struct cpp_device *cpp_dev, long rate, int idx);
 void msm_cpp_fetch_dt_params(struct cpp_device *cpp_dev);
 int msm_cpp_read_payload_params_from_dt(struct cpp_device *cpp_dev);

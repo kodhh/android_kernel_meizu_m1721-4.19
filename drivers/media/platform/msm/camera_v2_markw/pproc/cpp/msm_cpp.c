@@ -3913,26 +3913,22 @@ static  int msm_cpp_update_gdscr_status(struct cpp_device *cpp_dev,
 	bool status)
 {
 	int rc = 0;
-	int value = 0;
+	uint32_t msm_cpp_reg_idx;
 	if (!cpp_dev) {
 		pr_err("%s: cpp device invalid\n", __func__);
 		rc = -EINVAL;
 		goto end;
 	}
-
-	if (cpp_dev->camss_cpp_base) {
-		value = msm_camera_io_r(cpp_dev->camss_cpp_base);
-		pr_debug("value from camss cpp %x, status %d\n", value, status);
-		if (status) {
-			value &= CPP_GDSCR_SW_COLLAPSE_ENABLE;
-			value |= CPP_GDSCR_HW_CONTROL_ENABLE;
-		} else {
-			value |= CPP_GDSCR_HW_CONTROL_DISABLE;
-			value &= CPP_GDSCR_SW_COLLAPSE_DISABLE;
-		}
-		pr_debug("value %x after camss cpp mask\n", value);
-		msm_camera_io_w(value, cpp_dev->camss_cpp_base);
+	msm_cpp_reg_idx = msm_cpp_get_regulator_index(cpp_dev, "vdd");
+	if (msm_cpp_reg_idx < 0) {
+		pr_err(" Fail to regulator index\n");
+		return -EINVAL;
 	}
+	rc = msm_camera_regulator_set_mode(cpp_dev->cpp_vdd +
+		msm_cpp_reg_idx, 1, status);
+	if (rc < 0)
+		pr_err("update cpp gdscr status failed\n");
+
 end:
 	return rc;
 }
@@ -4003,14 +3999,6 @@ static int cpp_probe(struct platform_device *pdev)
 	memset(&cpp_vbif, 0, sizeof(struct msm_cpp_vbif_data));
 	cpp_dev->vbif_data = &cpp_vbif;
 
-	cpp_dev->camss_cpp_base =
-		msm_camera_get_reg_base(pdev, "camss_cpp", true);
-	if (!cpp_dev->camss_cpp_base) {
-		rc = -ENOMEM;
-		pr_err("failed to get camss_cpp_base\n");
-		goto camss_cpp_base_failed;
-	}
-
 	cpp_dev->base =
 		msm_camera_get_reg_base(pdev, "cpp", true);
 	if (!cpp_dev->base) {
@@ -4064,11 +4052,20 @@ static int cpp_probe(struct platform_device *pdev)
 		}
 	}
 
+	rc = msm_camera_get_reset_info(pdev,
+			&cpp_dev->micro_iface_reset);
+	if (rc < 0) {
+		cpp_dev->micro_iface_reset = NULL;
+		pr_err("%s: failed to get micro_iface_reset\n",
+				__func__);
+		goto get_reg_err;
+	}
+
 	rc = msm_camera_get_regulator_info(pdev, &cpp_dev->cpp_vdd,
 		&cpp_dev->num_reg);
 	if (rc < 0) {
 		pr_err("%s: failed to get the regulators\n", __func__);
-		goto get_reg_err;
+		goto get_reset_err;
 	}
 
 	msm_cpp_fetch_dt_params(cpp_dev);
@@ -4150,6 +4147,8 @@ static int cpp_probe(struct platform_device *pdev)
 cpp_probe_init_error:
 	media_entity_cleanup(&cpp_dev->msm_sd.sd.entity);
 	msm_sd_unregister(&cpp_dev->msm_sd);
+get_reset_err:
+	reset_control_put(cpp_dev->micro_iface_reset);
 get_reg_err:
 	msm_camera_put_clk_info(pdev, &cpp_dev->clk_info, &cpp_dev->cpp_clk,
 		cpp_dev->num_clks);
@@ -4162,7 +4161,7 @@ vbif_base_failed:
 cpp_base_failed:
 	msm_camera_put_reg_base(pdev, cpp_dev->camss_cpp_base,
 		"camss_cpp", true);
-camss_cpp_base_failed:
+
 	kfree(cpp_dev);
 	return rc;
 }
@@ -4207,6 +4206,9 @@ static int cpp_device_remove(struct platform_device *dev)
 	msm_camera_unregister_bus_client(CAM_BUS_CLIENT_CPP);
 	mutex_destroy(&cpp_dev->mutex);
 	kfree(cpp_dev->work);
+
+	reset_control_put(cpp_dev->micro_iface_reset);
+
 	destroy_workqueue(cpp_dev->timer_wq);
 	kfree(cpp_dev->cpp_clk);
 	kfree(cpp_dev);
