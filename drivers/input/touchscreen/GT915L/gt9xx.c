@@ -49,7 +49,7 @@ u8 gtp_glove_config[GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH]
                 = {GTP_REG_CONFIG_DATA >> 8, GTP_REG_CONFIG_DATA & 0xff};
 #endif
 
-
+    static bool disable_keys_function = false;
 #if GTP_HAVE_TOUCH_KEY
     static const u16 touch_key_array[] = GTP_KEY_TAB;
     #define GTP_MAX_KEY_NUM  (sizeof(touch_key_array)/sizeof(touch_key_array[0]))
@@ -58,7 +58,7 @@ u8 gtp_glove_config[GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH]
     static const int  key_codes[] = {KEY_HOME, KEY_BACK, KEY_MENU, KEY_SEARCH};
     static const char *key_names[] = {"Key_Home", "Key_Back", "Key_Menu", "Key_Search"};
 #endif
-    
+
 #endif
 
 #ifdef   PMX_DRIVER_GT915L
@@ -1198,7 +1198,7 @@ static void goodix_ts_work_func(struct work_struct *work)
     #endif
     
     #if GTP_HAVE_TOUCH_KEY
-        if (!pre_touch)
+        if (!pre_touch && !disable_keys_function)
         {
             for (i = 0; i < GTP_MAX_KEY_NUM; i++)
             {
@@ -2801,6 +2801,182 @@ ERR_GET_VCC:
 }
 #endif
 
+static struct device *tp_glove_dev;
+
+static ssize_t gt9xx_mido_gtp_glove_onoff_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+        return sprintf(buf, "%c\n", gtp_glove_onoff);
+}
+
+static ssize_t gt9xx_mido_gtp_glove_onoff_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct goodix_ts_data *ts = NULL;
+
+	ts = dev_get_drvdata(dev);
+
+	if (ts->gtp_is_suspend)
+		return -EINVAL;
+
+	sscanf(buf, "%c",  &gtp_glove_onoff);
+	gtp_glove_support_flag_changed = 1;
+
+	if ('1' == gtp_glove_onoff) {
+		u8 cfg_group[] = CTP_CFG_GROUP1_GLOVE;
+		gtp_reset_guitar(i2c_connect_client, 50);
+		msleep(100);
+		memcpy(&gtp_glove_config[GTP_ADDR_LENGTH],  cfg_group, GTP_CONFIG_MAX_LENGTH);
+		gtp_send_glove_cfg(i2c_connect_client);
+	} else if ('0' == gtp_glove_onoff) {
+		gtp_reset_guitar(i2c_connect_client, 50);
+		msleep(100);
+		gtp_send_cfg(i2c_connect_client);
+	}
+
+	return size;
+}
+
+static DEVICE_ATTR(glove_enable, 0644, gt9xx_mido_gtp_glove_onoff_show, gt9xx_mido_gtp_glove_onoff_store);
+
+void gt9xx_tp_glove_register(struct goodix_ts_data *data)
+{
+	int rc = 0;
+	struct class *tp_device_class = NULL;
+	tp_device_class = class_create(THIS_MODULE, "tp_glove");
+	tp_glove_dev = device_create(tp_device_class, NULL, 0, NULL, "device");
+	if (IS_ERR(tp_glove_dev))
+		pr_err("Failed to create device(glove_ctrl)!\n");
+
+
+	rc = device_create_file(tp_glove_dev, &dev_attr_glove_enable);
+	if (rc < 0)
+		pr_err("Failed to create device file(%s)!\n", dev_attr_glove_enable.attr.name);
+	dev_set_drvdata(tp_glove_dev, data);
+
+	printk("~~~~~ %s enable!!!!!\n", __func__);
+
+}
+
+static ssize_t gt9xx_mido_disable_keys_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	const char c = disable_keys_function ? '1' : '0';
+	return sprintf(buf, "%c\n", c);
+}
+
+static ssize_t gt9xx_mido_disable_keys_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int i;
+
+	if (sscanf(buf, "%u", &i) == 1 && i < 2) {
+		disable_keys_function = (i == 1);
+		return count;
+	} else {
+		dev_dbg(dev, "disable_keys write error\n");
+		return -EINVAL;
+	}
+}
+
+static DEVICE_ATTR(disable_keys, S_IWUSR | S_IRUSR, gt9xx_mido_disable_keys_show,
+		   gt9xx_mido_disable_keys_store);
+
+static ssize_t gt9xx_mido_enable_dt2w_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+        const char c = (gtp_gesture_onoff == '1')  ? '1' : '0';
+        return sprintf(buf, "%c\n", c);
+}
+
+static ssize_t gt9xx_mido_enable_dt2w_store(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t count)
+{
+        int i;
+
+        if (sscanf(buf, "%u", &i) == 1 && i < 2) {
+             if (i == 1)
+                gtp_gesture_onoff  = '1';
+             else
+                gtp_gesture_onoff  = '0';
+                
+             return count;
+        } else {
+                dev_dbg(dev, "enable_dt2w write error\n");
+                return -EINVAL;
+        }
+}
+
+
+static DEVICE_ATTR(enable_dt2w, S_IWUSR | S_IRUSR, gt9xx_mido_enable_dt2w_show,
+                   gt9xx_mido_enable_dt2w_store);
+
+static struct attribute *gt9xx_mido_attrs[] = {
+    &dev_attr_disable_keys.attr,
+    &dev_attr_enable_dt2w.attr,
+	NULL
+};
+
+static const struct attribute_group gt9xx_mido_attr_group = {
+       .attrs = gt9xx_mido_attrs,
+};
+
+static int gt9xx_mido_proc_init(struct kernfs_node *sysfs_node_parent)
+{
+       int len, ret = 0;
+       char *buf;
+       char *key_disabler_sysfs_node, *double_tap_sysfs_node;
+       struct proc_dir_entry *proc_entry_tp = NULL;
+       struct proc_dir_entry *proc_symlink_tmp = NULL;
+
+       buf = kzalloc(PATH_MAX, GFP_KERNEL);
+       if (buf) {
+               len = kernfs_path(sysfs_node_parent, buf, PATH_MAX);
+               if (unlikely(len >= PATH_MAX)) {
+                          pr_err("%s: Buffer too long: %d\n", __func__, len);
+                          ret = -ERANGE;
+                          goto exit;
+               }
+       }
+
+       proc_entry_tp = proc_mkdir("touchpanel", NULL);
+       if (proc_entry_tp == NULL) {
+               pr_err("%s: Couldn't create touchpanel dir in procfs\n", __func__);
+               ret = -ENOMEM;
+               goto exit;
+       }
+
+       key_disabler_sysfs_node = kzalloc(PATH_MAX, GFP_KERNEL);
+       if (key_disabler_sysfs_node)
+               sprintf(key_disabler_sysfs_node, "/sys%s/%s", buf, "disable_keys");
+       proc_symlink_tmp = proc_symlink("capacitive_keys_disable",
+                       proc_entry_tp, key_disabler_sysfs_node);
+       if (proc_symlink_tmp == NULL) {
+               pr_err("%s: Couldn't create capacitive_keys_enable symlink\n", __func__);
+               ret = -ENOMEM;
+               goto exit;
+       }
+
+       double_tap_sysfs_node = kzalloc(PATH_MAX, GFP_KERNEL);
+       if (double_tap_sysfs_node)
+               sprintf(double_tap_sysfs_node, "/sys%s/%s", buf, "enable_dt2w");
+       proc_symlink_tmp = proc_symlink("enable_dt2w",
+               proc_entry_tp, double_tap_sysfs_node);
+       if (proc_symlink_tmp == NULL) {
+               pr_err("%s: Couldn't create double_tap_enable symlink\n", __func__);
+               ret = -ENOMEM;
+               goto exit;
+       }
+
+exit:
+       kfree(buf);
+       kfree(key_disabler_sysfs_node);
+       kfree(double_tap_sysfs_node);
+       return ret;
+}
+
+
 #ifdef PMX_DRIVER_GT915L
 static int goodix_ts_pinctrl_init(struct goodix_ts_data *goodix_data)  
 {
@@ -3015,7 +3191,7 @@ static int goodix_ts_probe(struct i2c_client *client, const struct i2c_device_id
     spin_lock_init(&ts->irq_lock);          // 2.6.39 later
     // ts->irq_lock = SPIN_LOCK_UNLOCKED;   // 2.6.39 & before
 #if GTP_ESD_PROTECT
-    ts->clk_tick_cnt = 2 * HZ;      // HZ: clock ticks in 1 second generated by system
+    ts->clk_tick_cnt = msecs_to_jiffies(2000);     // HZ: clock ticks in 1 second generated by system
     GTP_DEBUG("Clock ticks for an esd cycle: %d", ts->clk_tick_cnt);  
     spin_lock_init(&ts->esd_lock);
     // ts->esd_lock = SPIN_LOCK_UNLOCKED;
@@ -3075,6 +3251,18 @@ static int goodix_ts_probe(struct i2c_client *client, const struct i2c_device_id
     {
         GTP_INFO("create proc entry %s success", GT91XX_CONFIG_PROC_FILE);
     }
+
+        ret = sysfs_create_group(&client->dev.kobj, &gt9xx_mido_attr_group);
+        if (ret) {
+	        dev_err(&client->dev, "Failure %d creating sysfs group\n",
+		        ret);
+                sysfs_remove_group(&client->dev.kobj, &gt9xx_mido_attr_group);
+        }
+	gt9xx_mido_proc_init(client->dev.kobj.sd);
+
+#if GTP_GLOVE_MODE
+	gt9xx_tp_glove_register(ts);
+#endif
 
 #if GTP_ESD_PROTECT
     gtp_esd_switch(client, SWITCH_ON);

@@ -102,7 +102,7 @@ static inline void desc_set_label(struct gpio_desc *d, const char *label)
  * The GPIO descriptor associated with the given GPIO, or %NULL if no GPIO
  * with the given number exists in the system.
  */
-#ifdef CONFIG_TOUCHSCREEN_GT915L
+#ifdef CONFIG_TOUCHSCREEN_GT9XX_v24
 static int special_irq;
 #endif
 struct gpio_desc *gpio_to_desc(unsigned gpio)
@@ -110,7 +110,7 @@ struct gpio_desc *gpio_to_desc(unsigned gpio)
 	struct gpio_device *gdev;
 	unsigned long flags;
 
-#ifdef CONFIG_TOUCHSCREEN_GT915L
+#ifdef CONFIG_TOUCHSCREEN_GT9XX_v24
 	if (gpio == 65)
 		special_irq = 1;
 	else
@@ -2608,7 +2608,7 @@ static int gpio_set_drive_single_ended(struct gpio_chip *gc, unsigned offset,
 	return gc->set_config ? gc->set_config(gc, offset, config) : -ENOTSUPP;
 }
 
-#ifdef CONFIG_TOUCHSCREEN_GT915L
+#ifdef CONFIG_TOUCHSCREEN_GT9XX_v24
 extern int gt9xx_flag;
 #endif
 
@@ -2687,19 +2687,16 @@ int gpiod_direction_output(struct gpio_desc *desc, int value)
 		value = !!value;
 
 	/* GPIOs used for IRQs shall not be set as output */
-#ifdef CONFIG_TOUCHSCREEN_GT915L
+#ifdef CONFIG_TOUCHSCREEN_GT9XX_v24
 	if (special_irq && gt9xx_flag)
 		pr_debug("[GPIO]set GPIO_65 as irq output\n");
 	else {
-#endif
-/* 		if (test_bit(FLAG_USED_AS_IRQ, &desc->flags)) {
+ 		if (test_bit(FLAG_USED_AS_IRQ, &desc->flags)) {
 			gpiod_err(desc,
 				 "%s: tried to set a GPIO tied to an IRQ as output\n",
 				 __func__);
 			return -EIO;
 		}
-*/
-#ifdef CONFIG_TOUCHSCREEN_GT915L
 	}
 #endif
 
