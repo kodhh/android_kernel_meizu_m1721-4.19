@@ -142,7 +142,6 @@
 			};
 		};
 
-/*
 		pmi8950_gpios: gpios {
 			compatible = "qcom,spmi-gpio";
 			reg = <0xc000 0x200>;
@@ -154,7 +153,8 @@
 			gpio-controller;
 			#gpio-cells = <2>;
 		};
-*/
+
+/*
 		pmi8950_gpios: gpios {
 			spmi-dev-container;
 			compatible = "qcom,qpnp-pin";
@@ -176,6 +176,7 @@
 				status = "disabled";
 			};
 		};
+*/
 
 		pmi8950_mpps: mpps {
 			compatible = "qcom,spmi-mpp";
