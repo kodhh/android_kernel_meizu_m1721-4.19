@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2014, 2018 The Linux Foundation. All rights reserved.
  *
@@ -49,7 +48,7 @@ static int __vmem_alloc_set(void *priv, u64 val)
 	return rc;
 }
 
-DEFINE_DEBUGFS_ATTRIBUTE(fops_vmem_alloc, __vmem_alloc_get,
+DEFINE_SIMPLE_ATTRIBUTE(fops_vmem_alloc, __vmem_alloc_get,
 		__vmem_alloc_set, "%llu");
 
 struct dentry *vmem_debugfs_init(struct platform_device *pdev)

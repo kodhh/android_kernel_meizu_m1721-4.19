@@ -1,6 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
- * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,6 +8,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
  */
 #include <linux/slab.h>
 #include "msm_vidc_internal.h"
@@ -716,14 +715,14 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.name = "Intra Refresh Mode",
 		.type = V4L2_CTRL_TYPE_MENU,
 		.minimum = V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_NONE,
-		.maximum = V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOMMODE,
+		.maximum = V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOM,
 		.default_value = V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_NONE,
 		.menu_skip_mask = ~(
 		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_NONE) |
 		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_CYCLIC) |
 		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_ADAPTIVE) |
 		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_CYCLIC_ADAPTIVE) |
-		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOMMODE)
+		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOM)
 		),
 		.qmenu = intra_refresh_modes,
 	},
@@ -824,14 +823,14 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.name = "Extradata Type",
 		.type = V4L2_CTRL_TYPE_MENU,
 		.minimum = V4L2_MPEG_VIDC_EXTRADATA_NONE,
-		.maximum = V4L2_MPEG_VIDC_EXTRADATA_YUV_STATS,
+		.maximum = V4L2_MPEG_VIDC_EXTRADATA_ENC_FRAME_QP,
 		.default_value = V4L2_MPEG_VIDC_EXTRADATA_NONE,
 		.menu_skip_mask = ~(
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_NONE) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_MB_QUANTIZATION) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_INTERLACE_VIDEO) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_VC1_FRAMEDISP) |
-			(1ULL << V4L2_MPEG_VIDC_EXTRADATA_VC1_SEQDISP) |
+			(1 << V4L2_MPEG_VIDC_EXTRADATA_VC1_SEQDISP) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_TIMESTAMP) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_S3D_FRAME_PACKING) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_FRAME_RATE) |
@@ -845,7 +844,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_ASPECT_RATIO) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_LTR) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_METADATA_MBI) |
-			(1ULL << V4L2_MPEG_VIDC_EXTRADATA_YUV_STATS)|
+			(1 << V4L2_MPEG_VIDC_EXTRADATA_YUV_STATS)|
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_ROI_QP) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_PQ_INFO) |
 			(1ULL << V4L2_MPEG_VIDC_EXTRADATA_ENC_FRAME_QP)
@@ -1426,24 +1425,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.qmenu = iframe_sizes,
 	},
 };
-struct msm_vidc_format_constraint enc_pix_format_constraints[] = {
-	{
-		.fourcc = V4L2_PIX_FMT_NV12,
-		.num_planes = 2,
-		.y_max_stride = 128,
-		.y_buffer_alignment = 32,
-		.uv_max_stride = 128,
-		.uv_buffer_alignment = 16,
-	},
-	{
-		.fourcc = V4L2_PIX_FMT_NV21,
-		.num_planes = 2,
-		.y_max_stride = 128,
-		.y_buffer_alignment = 32,
-		.uv_max_stride = 128,
-		.uv_buffer_alignment = 16,
-	},
-};
+
 #define NUM_CTRLS ARRAY_SIZE(msm_venc_ctrls)
 
 static u32 get_frame_size_nv12(int plane, u32 height, u32 width)
@@ -1714,8 +1696,8 @@ static int msm_venc_queue_setup(struct vb2_queue *q,
 		*num_planes = 1;
 
 		*num_buffers = inst->buff_req.buffer[0].buffer_count_actual =
-			max(*num_buffers,
-				 inst->buff_req.buffer[0].buffer_count_min);
+			max(*num_buffers, inst->buff_req.buffer[0].
+				buffer_count_min);
 
 		temp = *num_buffers;
 
@@ -2304,7 +2286,7 @@ static inline int venc_v4l2_to_hal(int id, int value)
 			return HAL_INTRA_REFRESH_NONE;
 		case V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_CYCLIC:
 			return HAL_INTRA_REFRESH_CYCLIC;
-		case V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOMMODE:
+		case V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOM:
 			return HAL_INTRA_REFRESH_RANDOM;
 		case V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_ADAPTIVE:
 			return HAL_INTRA_REFRESH_ADAPTIVE;
@@ -3318,10 +3300,10 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 
 		switch (ctrl->val) {
 		case V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE:
-			enable.enable = false;
+			enable.enable = 0;
 			break;
 		case V4L2_MPEG_VIDEO_HEADER_MODE_JOINED_WITH_I_FRAME:
-			enable.enable = true;
+			enable.enable = 1;
 			break;
 		case V4L2_MPEG_VIDEO_HEADER_MODE_JOINED_WITH_1ST_FRAME:
 		default:
@@ -3377,10 +3359,10 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 
 		switch (ctrl->val) {
 		case V4L2_MPEG_VIDC_VIDEO_AU_DELIMITER_DISABLED:
-			enable.enable = false;
+			enable.enable = 0;
 			break;
 		case V4L2_MPEG_VIDC_VIDEO_AU_DELIMITER_ENABLED:
-			enable.enable = true;
+			enable.enable = 1;
 			break;
 		default:
 			rc = -ENOTSUPP;
@@ -3446,11 +3428,11 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		property_id = HAL_CONFIG_VPE_DEINTERLACE;
 		switch (ctrl->val) {
 		case V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_ENABLED:
-			enable.enable = true;
+			enable.enable = 1;
 			break;
 		case V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_DISABLED:
 		default:
-			enable.enable = false;
+			enable.enable = 0;
 			break;
 		}
 		pdata = &enable;
@@ -3748,9 +3730,9 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		property_id = HAL_PARAM_VENC_LOW_LATENCY;
 		if (ctrl->val ==
 			V4L2_CID_MPEG_VIDC_VIDEO_LOWLATENCY_ENABLE)
-			enable.enable = true;
+			enable.enable = 1;
 		else
-			enable.enable = false;
+			enable.enable = 0;
 		pdata = &enable;
 		break;
 	}
@@ -3758,10 +3740,10 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		property_id = HAL_PARAM_VENC_H264_TRANSFORM_8x8;
 		switch (ctrl->val) {
 		case V4L2_MPEG_VIDC_VIDEO_H264_TRANSFORM_8x8_ENABLE:
-			enable.enable = true;
+			enable.enable = 1;
 			break;
 		case V4L2_MPEG_VIDC_VIDEO_H264_TRANSFORM_8x8_DISABLE:
-			enable.enable = false;
+			enable.enable = 0;
 			break;
 		default:
 			dprintk(VIDC_ERR,
@@ -4205,7 +4187,6 @@ int msm_venc_s_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 	int rc = 0;
 	int i;
 	struct hfi_device *hdev;
-	struct msm_vidc_format_constraint *fmt_constraint;
 
 	if (!inst || !f) {
 		dprintk(VIDC_ERR,
@@ -4292,29 +4273,7 @@ int msm_venc_s_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 		msm_venc_update_plane_count(inst, OUTPUT_PORT);
 		fmt->num_planes = inst->fmts[OUTPUT_PORT].num_planes;
 
-		rc = msm_comm_set_color_format(inst, HAL_BUFFER_INPUT,
-						fmt->fourcc);
-		if (rc) {
-			dprintk(VIDC_ERR, "%s: set color format (%#x) failed\n",
-				__func__, fmt->fourcc);
-			return rc;
-		}
-
-		fmt_constraint = msm_comm_get_pixel_fmt_constraints(
-					enc_pix_format_constraints,
-					ARRAY_SIZE(enc_pix_format_constraints),
-					fmt->fourcc);
-		if (fmt_constraint) {
-			rc = msm_comm_set_color_format_constraints(inst,
-				msm_comm_get_hal_output_buffer(inst),
-				fmt_constraint);
-			if (rc) {
-				dprintk(VIDC_ERR,
-					"%s: Set constraints for color format %#x failed\n",
-					__func__, fmt->fourcc);
-				return rc;
-			}
-		}
+		msm_comm_set_color_format(inst, HAL_BUFFER_INPUT, fmt->fourcc);
 	} else {
 		dprintk(VIDC_ERR, "%s - Unsupported buf type: %d\n",
 			__func__, f->type);

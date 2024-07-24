@@ -1,6 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
- * Copyright (c) 2014-2016, 2018-2019 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2016, 2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -128,7 +126,7 @@ static inline u32 __readl(void * __iomem addr)
 {
 	u32 value = 0;
 
-	pr_debug("read %pK\n", addr);
+	pr_debug("read %pK ", addr);
 	value = readl_relaxed(addr);
 	pr_debug("-> %08x\n", value);
 
@@ -181,7 +179,7 @@ static inline int __power_on(struct vmem *v)
 
 	rc = regulator_enable(v->vdd);
 	if (rc) {
-		pr_err("Failed to power on gdsc (%d)\n", rc);
+		pr_err("Failed to power on gdsc (%d)", rc);
 		goto unvote_bus;
 	}
 	pr_debug("Enabled regulator vdd\n");
@@ -242,7 +240,7 @@ static inline void __bank_set_state(struct vmem *v, unsigned int bank,
 {
 	uint32_t bank_state = 0;
 	struct {
-		uint32_t (*update)(unsigned int b);
+		uint32_t (*update)(unsigned int);
 		uint32_t mask;
 	} banks[MAX_BANKS] = {
 		{BANK0_STATE_UPDATE, BANK0_STATE_MASK},
@@ -410,13 +408,13 @@ static void __irq_helper(struct work_struct *work)
 	err_syn = __readl(OCIMEM_AXI_ERR_SYNDROME(v));
 
 	pr_crit("Detected a fault on VMEM:\n");
-	pr_debug("\tinterrupt status: %x\n", stat);
-	pr_debug("\tgeneral status: %x\n", gen_stat);
-	pr_debug("\tmemory status: %x\n", pscgc_stat);
-	pr_debug("\tfault address: %x (absolute), %x (relative)\n",
+	pr_cont("\tinterrupt status: %x\n", stat);
+	pr_cont("\tgeneral status: %x\n", gen_stat);
+	pr_cont("\tmemory status: %x\n", pscgc_stat);
+	pr_cont("\tfault address: %x (absolute), %x (relative)\n",
 			err_addr_abs, err_addr_rel);
-	pr_debug("\tfault bank: %x\n", err_addr_rel / v->bank_size);
-	pr_debug("\tfault core: %u (mid), %u (pid), %u (bid)\n",
+	pr_cont("\tfault bank: %x\n", err_addr_rel / v->bank_size);
+	pr_cont("\tfault core: %u (mid), %u (pid), %u (bid)\n",
 			ERR_SYN_AMID(err_syn), ERR_SYN_APID(err_syn),
 			ERR_SYN_ABID(err_syn));
 
@@ -589,7 +587,7 @@ static int vmem_probe(struct platform_device *pdev)
 	struct vmem *v = NULL;
 
 	if (vmem) {
-		pr_err("Only one instance of %s allowed\n", pdev->name);
+		pr_err("Only one instance of %s allowed", pdev->name);
 		return -EEXIST;
 	}
 
@@ -681,6 +679,7 @@ static struct platform_driver vmem_driver = {
 	.remove = vmem_remove,
 	.driver = {
 		.name = "msm_vidc_vmem",
+		.owner = THIS_MODULE,
 		.of_match_table = vmem_of_match,
 	},
 };

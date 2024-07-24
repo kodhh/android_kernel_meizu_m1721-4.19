@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-only
 menuconfig MSM_VIDC_VMEM
 	bool "Qualcomm Technologies Inc MSM VMEM driver"
-	depends on MSM_VIDC_3X_V4L2
+	depends on ARCH_QCOM && MSM_VIDC_3X_V4L2

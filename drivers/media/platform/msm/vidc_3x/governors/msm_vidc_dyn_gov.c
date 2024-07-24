@@ -1,6 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
- * Copyright (c) 2015, 2017-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015, 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,17 +11,26 @@
  */
 
 #include <linux/module.h>
+#include "governor.h"
 #include "fixedpoint.h"
 #include "../msm_vidc_internal.h"
 #include "../msm_vidc_debug.h"
 #include "../vidc_hfi_api.h"
 
+static bool debug;
+module_param(debug, bool, 0644);
 
-enum vidc_bus_type {
-	PERF,
-	DDR,
-	LLCC,
+enum governor_mode {
+	GOVERNOR_DDR,
+	GOVERNOR_VMEM,
+	GOVERNOR_VMEM_PLUS,
 };
+
+struct governor {
+	enum governor_mode mode;
+	struct devfreq_governor devfreq_gov;
+};
+
 enum scenario {
 	SCENARIO_WORST,
 	SCENARIO_SUSTAINED_WORST,
@@ -32,8 +39,8 @@ enum scenario {
 };
 
 /*
- * Minimum dimensions for which to calculate bandwidth.
- * This means that anything bandwidth(0, 0) ==
+ * Minimum dimensions that the governor is willing to calculate
+ * bandwidth for.  This means that anything bandwidth(0, 0) ==
  * bandwidth(BASELINE_DIMENSIONS.width, BASELINE_DIMENSIONS.height)
  */
 const struct {
@@ -161,13 +168,6 @@ static struct lut {
 		}
 	},
 };
-static u32 get_type_frm_name(char *name)
-{
-	if (!strcmp(name, "venus-ddr"))
-		return DDR;
-	else
-		return PERF;
-}
 
 static struct lut const *__lut(int width, int height)
 {
@@ -242,7 +242,7 @@ static void __dump(struct dump dump[], int len)
 }
 
 static unsigned long __calculate_vpe(struct vidc_bus_vote_data *d,
-		enum vidc_bus_type type)
+		enum governor_mode gm)
 {
 	return 0;
 }
@@ -275,9 +275,40 @@ static int __bpp(enum hal_uncompressed_format f)
 	}
 }
 
-static unsigned long __calculate_decoder(struct vidc_bus_vote_data *d,
-		enum vidc_bus_type type)
+static unsigned long __calculate_vmem_plus_ab(struct vidc_bus_vote_data *d)
 {
+	unsigned long i = 0, vmem_plus = 0;
+
+	if (!d->imem_ab_tbl || !d->imem_ab_tbl_size) {
+		vmem_plus = 1; /* Vote for the min ab value */
+		goto exit;
+	}
+
+	/* Pick up vmem frequency based on venus core frequency */
+	for (i = 0; i < d->imem_ab_tbl_size; i++) {
+		if (d->imem_ab_tbl[i].core_freq == d->core_freq) {
+			vmem_plus = d->imem_ab_tbl[i].imem_ab;
+			break;
+		}
+	}
+
+	/* Incase we get an unsupported freq throw a warning
+	 * and set ab to the minimum value.
+	 */
+	if (!vmem_plus) {
+		vmem_plus = 1;
+		dprintk(VIDC_WARN,
+			"could not calculate vmem ab value due to core freq mismatch\n");
+		WARN_ON(VIDC_DBG_WARN_ENABLE);
+	}
+
+exit:
+	return vmem_plus;
+}
+
+
+static unsigned long __calculate_decoder(struct vidc_bus_vote_data *d,
+		enum governor_mode gm) {
 	/*
 	 * XXX: Don't fool around with any of the hardcoded numbers unless you
 	 * know /exactly/ what you're doing.  Many of these numbers are
@@ -491,7 +522,7 @@ static unsigned long __calculate_decoder(struct vidc_bus_vote_data *d,
 	ddr.total = fp_mult(ddr.total, qsmmu_bw_overhead_factor);
 
 	/* Dump all the variables for easier debugging */
-	if (msm_vidc_debug & VIDC_DBG) {
+	if (debug) {
 		struct dump dump[] = {
 		{"DECODER PARAMETERS", "", DUMP_HEADER_MAGIC},
 		{"content", "%d", scenario},
@@ -576,9 +607,15 @@ static unsigned long __calculate_decoder(struct vidc_bus_vote_data *d,
 		__dump(dump, ARRAY_SIZE(dump));
 	}
 
-	switch (type) {
-	case DDR:
+	switch (gm) {
+	case GOVERNOR_DDR:
 		ret = kbps(fp_round(ddr.total));
+		break;
+	case GOVERNOR_VMEM:
+		ret = kbps(fp_round(vmem.total));
+		break;
+	case GOVERNOR_VMEM_PLUS:
+		ret = __calculate_vmem_plus_ab(d);
 		break;
 	default:
 		dprintk(VIDC_ERR, "%s - Unknown governor\n", __func__);
@@ -589,7 +626,7 @@ static unsigned long __calculate_decoder(struct vidc_bus_vote_data *d,
 
 
 static unsigned long __calculate_encoder(struct vidc_bus_vote_data *d,
-		enum vidc_bus_type type)
+		enum governor_mode gm)
 {
 	/*
 	 * XXX: Don't fool around with any of the hardcoded numbers unless you
@@ -625,7 +662,7 @@ static unsigned long __calculate_encoder(struct vidc_bus_vote_data *d,
 		search_window_size_vertical_b, search_window_factor_b,
 		search_window_factor_bw_b, vmem_size_b, available_vmem_b;
 
-	/* Output parameters */
+	/* Output paramaters */
 	struct {
 		fp_t vsp_read, vsp_write, collocated_read, collocated_write,
 			line_buffer_read, line_buffer_write, original_read,
@@ -888,7 +925,7 @@ static unsigned long __calculate_encoder(struct vidc_bus_vote_data *d,
 	if (width * height >= 3840 * 2160 && low_power)
 		vmem.total = FP_INT(NOMINAL_BW_MBPS);
 
-	if (msm_vidc_debug & VIDC_DBG) {
+	if (debug) {
 		struct dump dump[] = {
 		{"ENCODER PARAMETERS", "", DUMP_HEADER_MAGIC},
 		{"scenario", "%d", scenario},
@@ -976,9 +1013,15 @@ static unsigned long __calculate_encoder(struct vidc_bus_vote_data *d,
 		__dump(dump, ARRAY_SIZE(dump));
 	}
 
-	switch (type) {
-	case DDR:
+	switch (gm) {
+	case GOVERNOR_DDR:
 		ret = kbps(fp_round(ddr.total));
+		break;
+	case GOVERNOR_VMEM:
+		ret = kbps(fp_round(vmem.total));
+		break;
+	case GOVERNOR_VMEM_PLUS:
+		ret = __calculate_vmem_plus_ab(d);
 		break;
 	default:
 		dprintk(VIDC_ERR, "%s - Unknown governor\n", __func__);
@@ -988,49 +1031,124 @@ static unsigned long __calculate_encoder(struct vidc_bus_vote_data *d,
 }
 
 static unsigned long __calculate(struct vidc_bus_vote_data *d,
-		enum vidc_bus_type type)
+		enum governor_mode gm)
 {
-	unsigned long value = 0;
+	unsigned long (*calc[])(struct vidc_bus_vote_data *,
+			enum governor_mode) = {
+		[HAL_VIDEO_DOMAIN_VPE] = __calculate_vpe,
+		[HAL_VIDEO_DOMAIN_ENCODER] = __calculate_encoder,
+		[HAL_VIDEO_DOMAIN_DECODER] = __calculate_decoder,
+	};
 
-	switch (d->domain) {
-	case HAL_VIDEO_DOMAIN_VPE:
-		value = __calculate_vpe(d, type);
-		break;
-	case HAL_VIDEO_DOMAIN_ENCODER:
-		value = __calculate_encoder(d, type);
-		break;
-	case HAL_VIDEO_DOMAIN_DECODER:
-		value = __calculate_decoder(d, type);
-		break;
-	default:
-		dprintk(VIDC_ERR, "Unknown Domain");
-	}
-
-	return value;
+	return calc[d->domain](d, gm);
 }
 
-unsigned long __calc_bw(struct bus_info *bus,
-				struct msm_vidc_gov_data *vidc_data)
+static int __get_target_freq(struct devfreq *dev, unsigned long *freq)
 {
 	unsigned long ab_kbps = 0, c = 0;
-	enum vidc_bus_type type;
+	struct devfreq_dev_status stats = {0};
+	struct msm_vidc_gov_data *vidc_data = NULL;
+	struct governor *gov = NULL;
 
-	if (!vidc_data || !vidc_data->data_count || !vidc_data->data)
-		goto exit;
+	if (!dev || !freq)
+		return -EINVAL;
+
+	gov = container_of(dev->governor,
+			struct governor, devfreq_gov);
+	dev->profile->get_dev_status(dev->dev.parent, &stats);
+	vidc_data = (struct msm_vidc_gov_data *)stats.private_data;
 
 	for (c = 0; c < vidc_data->data_count; ++c) {
 		if (vidc_data->data->power_mode == VIDC_POWER_TURBO) {
-			ab_kbps = INT_MAX;
+			*freq = INT_MAX;
 			goto exit;
 		}
 	}
 
-	type = get_type_frm_name(bus->name);
-
 	for (c = 0; c < vidc_data->data_count; ++c)
-		ab_kbps += __calculate(&vidc_data->data[c], type);
+		ab_kbps += __calculate(&vidc_data->data[c], gov->mode);
 
+	*freq = clamp(ab_kbps, dev->min_freq, dev->max_freq ?: UINT_MAX);
 exit:
-	trace_msm_vidc_perf_bus_vote(bus->name, ab_kbps);
-	return ab_kbps;
+	return 0;
 }
+
+static int __event_handler(struct devfreq *devfreq, unsigned int event,
+		void *data)
+{
+	int rc = 0;
+
+	if (!devfreq)
+		return -EINVAL;
+
+	switch (event) {
+	case DEVFREQ_GOV_START:
+	case DEVFREQ_GOV_RESUME:
+		mutex_lock(&devfreq->lock);
+		rc = update_devfreq(devfreq);
+		mutex_unlock(&devfreq->lock);
+		break;
+	}
+
+	return rc;
+}
+
+static struct governor governors[] = {
+	{
+		.mode = GOVERNOR_DDR,
+		.devfreq_gov = {
+			.name = "msm-vidc-ddr",
+			.get_target_freq = __get_target_freq,
+			.event_handler = __event_handler,
+		},
+	},
+	{
+		.mode = GOVERNOR_VMEM,
+		.devfreq_gov = {
+			.name = "msm-vidc-vmem",
+			.get_target_freq = __get_target_freq,
+			.event_handler = __event_handler,
+		},
+	},
+	{
+		.mode = GOVERNOR_VMEM_PLUS,
+		.devfreq_gov = {
+			.name = "msm-vidc-vmem+",
+			.get_target_freq = __get_target_freq,
+			.event_handler = __event_handler,
+		},
+	},
+};
+
+static int __init msm_vidc_bw_gov_init(void)
+{
+	int c = 0, rc = 0;
+
+	for (c = 0; c < ARRAY_SIZE(governors); ++c) {
+		dprintk(VIDC_DBG, "Adding governor %s\n",
+				governors[c].devfreq_gov.name);
+
+		rc = devfreq_add_governor(&governors[c].devfreq_gov);
+		if (rc) {
+			dprintk(VIDC_ERR, "Error adding governor %s: %d\n",
+				governors[c].devfreq_gov.name, rc);
+			break;
+		}
+	}
+
+	return rc;
+}
+module_init(msm_vidc_bw_gov_init);
+
+static void __exit msm_vidc_bw_gov_exit(void)
+{
+	int c = 0;
+
+	for (c = 0; c < ARRAY_SIZE(governors); ++c) {
+		dprintk(VIDC_DBG, "Removing governor %s\n",
+				governors[c].devfreq_gov.name);
+		devfreq_remove_governor(&governors[c].devfreq_gov);
+	}
+}
+module_exit(msm_vidc_bw_gov_exit);
+MODULE_LICENSE("GPL v2");

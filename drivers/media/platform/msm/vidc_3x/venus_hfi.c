@@ -1,6 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
- * Copyright (c) 2012-2016, 2018-2021, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2016, 2018-2020, The Linux Foundation.
+ * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,6 +9,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
  */
 
 #include <asm/dma-iommu.h>
@@ -113,10 +113,7 @@ static inline void __strict_check(struct venus_hfi_device *device)
 		WARN_ON(VIDC_DBG_WARN_ENABLE);
 	}
 }
-static inline bool is_clock_bus_voted(struct venus_hfi_device *device)
-{
-	return (device->bus_vote.total_bw_ddr && device->clk_freq);
-}
+
 static inline void __set_state(struct venus_hfi_device *device,
 		enum venus_hfi_state state)
 {
@@ -135,7 +132,7 @@ static void __dump_packet(u8 *packet)
 	/* row must contain enough for 0xdeadbaad * 8 to be converted into
 	 * "de ad ba ab " * 8 + '\0'
 	 */
-	char row[96]; /*char row[3 * row_size];*/
+	char row[3 * row_size];
 
 	for (c = 0; c * row_size < packet_size; ++c) {
 		int bytes_to_read = ((c + 1) * row_size > packet_size) ?
@@ -590,8 +587,7 @@ static int __smem_alloc(struct venus_hfi_device *dev,
 		goto fail_smem_alloc;
 	}
 
-	dprintk(VIDC_DBG, "%s: ptr = %pK, size = %d\n",
-			__func__,
+	dprintk(VIDC_DBG, "__smem_alloc: ptr = %pK, size = %d\n",
 			alloc->kvaddr, size);
 	rc = msm_smem_cache_operations(alloc->dma_buf, 0, alloc->size,
 		SMEM_CACHE_CLEAN);
@@ -747,24 +743,84 @@ bool venus_hfi_is_session_supported(unsigned long sessions_supported,
 	return __is_session_supported(sessions_supported, session_type);
 }
 
-static int __vote_bandwidth(struct bus_info *bus,
-		unsigned long *freq)
+static int __devfreq_target(struct device *devfreq_dev,
+		unsigned long *freq, u32 flags)
 {
 	int rc = 0;
 	uint64_t ab = 0;
+	struct bus_info *bus = NULL, *temp = NULL;
+	struct venus_hfi_device *device = dev_get_drvdata(devfreq_dev);
 
+	venus_hfi_for_each_bus(device, temp) {
+		if (temp->dev == devfreq_dev) {
+			bus = temp;
+			break;
+		}
+	}
+
+	if (!bus) {
+		rc = -EBADHANDLE;
+		goto err_unknown_device;
+	}
+
+	/*
+	 * Clamp for all non zero frequencies. This clamp is necessary to stop
+	 * devfreq driver from spamming - Couldn't update frequency - logs, if
+	 * the scaled ab value is not part of the frequency table.
+	 */
 	if (*freq)
 		*freq = clamp_t(typeof(*freq), *freq, bus->range[0],
 				bus->range[1]);
 
-	/* Bus Driver expects values in Bps */
+	/* we expect governors to provide values in kBps form, convert to Bps */
 	ab = *freq * 1000;
-	dprintk(VIDC_PROF, "Voting bus %s to ab %llu\n", bus->name, ab);
 	rc = msm_bus_scale_update_bw(bus->client, ab, 0);
-	if (rc)
-		dprintk(VIDC_ERR, "Failed voting bus %s to ab %llu, rc=%d\n",
+	if (rc) {
+		dprintk(VIDC_ERR, "Failed voting bus %s to ab %llu\n: %d",
 				bus->name, ab, rc);
+		goto err_unknown_device;
+	}
 
+	dprintk(VIDC_PROF, "Voting bus %s to ab %llu\n", bus->name, ab);
+
+	return 0;
+err_unknown_device:
+	return rc;
+}
+
+static int __devfreq_get_status(struct device *devfreq_dev,
+		struct devfreq_dev_status *stat)
+{
+	int rc = 0;
+	struct bus_info *bus = NULL, *temp = NULL;
+	struct venus_hfi_device *device = dev_get_drvdata(devfreq_dev);
+
+	venus_hfi_for_each_bus(device, temp) {
+		if (temp->dev == devfreq_dev) {
+			bus = temp;
+			break;
+		}
+	}
+
+	if (!bus) {
+		rc = -EBADHANDLE;
+		goto err_unknown_device;
+	}
+
+	*stat = (struct devfreq_dev_status) {
+		.private_data = &device->bus_vote,
+		/*
+		 * Put in dummy place holder values for upstream govs, our
+		 * custom gov only needs .private_data.  We should fill this in
+		 * properly if we can actually measure busy_time accurately
+		 * (which we can't at the moment)
+		 */
+		.total_time = 1,
+		.busy_time = 1,
+		.current_frequency = 0,
+	};
+
+err_unknown_device:
 	return rc;
 }
 
@@ -772,13 +828,21 @@ static int __unvote_buses(struct venus_hfi_device *device)
 {
 	int rc = 0;
 	struct bus_info *bus = NULL;
-	unsigned long freq = 0;
 
 	venus_hfi_for_each_bus(device, bus) {
-			rc = __vote_bandwidth(bus, &freq);
-			if (rc)
-				goto err_unknown_device;
+		int local_rc = 0;
+		unsigned long zero = 0;
+
+		rc = devfreq_suspend_device(bus->devfreq);
+		if (rc)
+			goto err_unknown_device;
+
+		local_rc = __devfreq_target(bus->dev, &zero, 0);
+		rc = rc ?: local_rc;
 	}
+
+	if (rc)
+		dprintk(VIDC_WARN, "Failed to unvote some buses\n");
 
 err_unknown_device:
 	return rc;
@@ -790,7 +854,6 @@ static int __vote_buses(struct venus_hfi_device *device,
 	int rc = 0;
 	struct bus_info *bus = NULL;
 	struct vidc_bus_vote_data *new_data = NULL;
-	unsigned long freq = 0;
 
 	if (!num_data) {
 		dprintk(VIDC_DBG, "No vote data available\n");
@@ -814,21 +877,16 @@ no_data_count:
 	device->bus_vote.imem_size = device->res->imem_size;
 
 	venus_hfi_for_each_bus(device, bus) {
-		if (!bus->is_prfm_gov_used) {
-			rc = msm_vidc_table_get_target_freq(
-					device->res->gov_data,
-					&device->bus_vote, &freq);
-			if (rc) {
-				dprintk(VIDC_ERR, "unable to get freq\n");
-				return rc;
-			}
-			device->bus_vote.total_bw_ddr = freq;
-		} else
-			freq = bus->range[1];
+		if (bus && bus->devfreq) {
+			/* NOP if already resume */
+			rc = devfreq_resume_device(bus->devfreq);
+			if (rc)
+				goto err_no_mem;
 
-		rc = __vote_bandwidth(bus, &freq);
-		if (rc)
-			return rc;
+			/* Kick devfreq awake incase _resume() didn't do it */
+			bus->devfreq->nb.notifier_call(
+				&bus->devfreq->nb, 0, NULL);
+		}
 	}
 
 err_no_mem:
@@ -1538,12 +1596,6 @@ static int __iface_cmdq_write_relaxed(struct venus_hfi_device *device,
 		goto err_q_write;
 	}
 
-	if (cmd_packet->packet_type == HFI_CMD_SESSION_EMPTY_BUFFER &&
-				!is_clock_bus_voted(device))
-		dprintk(VIDC_ERR, "%s: bus %llu bps or clock %lu MHz\n",
-				__func__, device->bus_vote.total_bw_ddr,
-					device->clk_freq);
-
 	if (!__write_queue(q_info, (u8 *)pkt, requires_interrupt)) {
 		if (device->res->sw_power_collapsible) {
 			cancel_delayed_work(&venus_hfi_pm_work);
@@ -1600,13 +1652,14 @@ static int __iface_msgq_read(struct venus_hfi_device *device, void *pkt)
 		goto read_error_null;
 	}
 
-	q_info = &device->iface_queues[VIDC_IFACEQ_MSGQ_IDX];
-	if (q_info->q_array.align_virtual_addr == NULL) {
+	if (device->iface_queues[VIDC_IFACEQ_MSGQ_IDX].
+		q_array.align_virtual_addr == 0) {
 		dprintk(VIDC_ERR, "cannot read from shared MSG Q's\n");
 		rc = -ENODATA;
 		goto read_error_null;
 	}
 
+	q_info = &device->iface_queues[VIDC_IFACEQ_MSGQ_IDX];
 	if (!__read_queue(q_info, (u8 *)pkt, &tx_req_is_set)) {
 		__hal_sim_modify_msg_packet((u8 *)pkt, device);
 		if (tx_req_is_set)
@@ -1639,13 +1692,14 @@ static int __iface_dbgq_read(struct venus_hfi_device *device, void *pkt)
 		goto dbg_error_null;
 	}
 
-	q_info = &device->iface_queues[VIDC_IFACEQ_DBGQ_IDX];
-	if (q_info->q_array.align_virtual_addr == NULL) {
+	if (device->iface_queues[VIDC_IFACEQ_DBGQ_IDX].
+		q_array.align_virtual_addr == 0) {
 		dprintk(VIDC_ERR, "cannot read from shared DBG Q's\n");
 		rc = -ENODATA;
 		goto dbg_error_null;
 	}
 
+	q_info = &device->iface_queues[VIDC_IFACEQ_DBGQ_IDX];
 	if (!__read_queue(q_info, (u8 *)pkt, &tx_req_is_set)) {
 		if (tx_req_is_set)
 			__write_register(device, VIDC_CPU_IC_SOFTINT,
@@ -1898,7 +1952,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 	q_hdr = iface_q->q_hdr;
 	q_hdr->qhdr_start_addr = (u32)iface_q->q_array.align_device_addr;
 	q_hdr->qhdr_type |= HFI_Q_ID_HOST_TO_CTRL_CMD_Q;
-	if ((phys_addr_t)q_hdr->qhdr_start_addr !=
+	if ((ion_phys_addr_t)q_hdr->qhdr_start_addr !=
 		iface_q->q_array.align_device_addr) {
 		dprintk(VIDC_ERR, "Invalid CMDQ device address (%pa)",
 			&iface_q->q_array.align_device_addr);
@@ -1908,7 +1962,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 	q_hdr = iface_q->q_hdr;
 	q_hdr->qhdr_start_addr = (u32)iface_q->q_array.align_device_addr;
 	q_hdr->qhdr_type |= HFI_Q_ID_CTRL_TO_HOST_MSG_Q;
-	if ((phys_addr_t)q_hdr->qhdr_start_addr !=
+	if ((ion_phys_addr_t)q_hdr->qhdr_start_addr !=
 		iface_q->q_array.align_device_addr) {
 		dprintk(VIDC_ERR, "Invalid MSGQ device address (%pa)",
 			&iface_q->q_array.align_device_addr);
@@ -1923,14 +1977,14 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 	 * need of interrupt from video hardware for debug messages
 	 */
 	q_hdr->qhdr_rx_req = 0;
-	if ((phys_addr_t)q_hdr->qhdr_start_addr !=
+	if ((ion_phys_addr_t)q_hdr->qhdr_start_addr !=
 		iface_q->q_array.align_device_addr) {
 		dprintk(VIDC_ERR, "Invalid DBGQ device address (%pa)",
 			&iface_q->q_array.align_device_addr);
 	}
 
 	value = (u32)dev->iface_q_table.align_device_addr;
-	if ((phys_addr_t)value !=
+	if ((ion_phys_addr_t)value !=
 		dev->iface_q_table.align_device_addr) {
 		dprintk(VIDC_ERR,
 			"Invalid iface_q_table device address (%pa)",
@@ -1944,7 +1998,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 			sizeof(struct hfi_mem_map_table);
 		qdss->mem_map_table_base_addr =
 			(u32)mem_map_table_base_addr;
-		if ((phys_addr_t)qdss->mem_map_table_base_addr !=
+		if ((ion_phys_addr_t)qdss->mem_map_table_base_addr !=
 				mem_map_table_base_addr) {
 			dprintk(VIDC_ERR,
 					"Invalid mem_map_table_base_addr (%#lx)",
@@ -1971,7 +2025,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 		}
 
 		value = (u32)dev->qdss.align_device_addr;
-		if ((phys_addr_t)value !=
+		if ((ion_phys_addr_t)value !=
 				dev->qdss.align_device_addr) {
 			dprintk(VIDC_ERR, "Invalid qdss device address (%pa)",
 					&dev->qdss.align_device_addr);
@@ -1981,7 +2035,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 	vsfr = (struct hfi_sfr_struct *) dev->sfr.align_virtual_addr;
 	vsfr->bufSize = ALIGNED_SFR_SIZE;
 	value = (u32)dev->sfr.align_device_addr;
-	if ((phys_addr_t)value !=
+	if ((ion_phys_addr_t)value !=
 		dev->sfr.align_device_addr) {
 		dprintk(VIDC_ERR, "Invalid sfr device address (%pa)",
 			&dev->sfr.align_device_addr);
@@ -3027,25 +3081,32 @@ static int __check_core_registered(struct hal_device_data core,
 			device = list_entry(curr,
 				struct venus_hfi_device, list);
 			if (device && device->hal_data->irq == irq &&
-				(CONTAINS(device->hal_data->firmware_base,
-					FIRMWARE_SIZE, fw_addr) ||
+				(CONTAINS(device->hal_data->
+						firmware_base,
+						FIRMWARE_SIZE, fw_addr) ||
 				CONTAINS(fw_addr, FIRMWARE_SIZE,
-					device->hal_data->firmware_base) ||
-				CONTAINS(device->hal_data->register_base,
-					reg_size, reg_addr) ||
+						device->hal_data->
+						firmware_base) ||
+				CONTAINS(device->hal_data->
+						register_base,
+						reg_size, reg_addr) ||
 				CONTAINS(reg_addr, reg_size,
-					device->hal_data->register_base) ||
-				OVERLAPS(device->hal_data->register_base,
-					reg_size, reg_addr, reg_size) ||
+						device->hal_data->
+						register_base) ||
+				OVERLAPS(device->hal_data->
+						register_base,
+						reg_size, reg_addr, reg_size) ||
 				OVERLAPS(reg_addr, reg_size,
-					device->hal_data->register_base,
-					reg_size) ||
-				OVERLAPS(device->hal_data->firmware_base,
-					FIRMWARE_SIZE, fw_addr,
-					FIRMWARE_SIZE) ||
+						device->hal_data->
+						register_base, reg_size) ||
+				OVERLAPS(device->hal_data->
+						firmware_base,
+						FIRMWARE_SIZE, fw_addr,
+						FIRMWARE_SIZE) ||
 				OVERLAPS(fw_addr, FIRMWARE_SIZE,
-					device->hal_data->firmware_base,
-					FIRMWARE_SIZE))) {
+						device->hal_data->
+						firmware_base,
+						FIRMWARE_SIZE))) {
 				return 0;
 			}
 			dprintk(VIDC_INFO, "Device not registered\n");
@@ -3204,9 +3265,11 @@ static void __dump_venus_debug_registers(struct venus_hfi_device *device)
 	dprintk(VIDC_ERR, "VIDC_CPU_CS_SCIACMDARG0: 0x%x\n", reg);
 }
 
-static void __process_sys_error(struct venus_hfi_device *device)
+static void print_sfr_message(struct venus_hfi_device *device)
 {
 	struct hfi_sfr_struct *vsfr = NULL;
+	u32 vsfr_size = 0;
+	void *p = NULL;
 
 	/* Once SYS_ERROR received from HW, it is safe to halt the AXI.
 	 * With SYS_ERROR, Venus FW may have crashed and HW might be
@@ -3218,13 +3281,11 @@ static void __process_sys_error(struct venus_hfi_device *device)
 
 	vsfr = (struct hfi_sfr_struct *)device->sfr.align_virtual_addr;
 	if (vsfr) {
-		void *p = memchr(vsfr->rg_data, '\0', vsfr->bufSize);
-		/* SFR isn't guaranteed to be NULL terminated
-		 * since SYS_ERROR indicates that Venus is in the
-		 * process of crashing.
-		 */
+		vsfr_size = vsfr->bufSize - sizeof(u32);
+		p = memchr(vsfr->rg_data, '\0', vsfr_size);
+		/* SFR isn't guaranteed to be NULL terminated */
 		if (p == NULL)
-			vsfr->rg_data[vsfr->bufSize - 1] = '\0';
+			vsfr->rg_data[vsfr_size - 1] = '\0';
 
 		dprintk(VIDC_ERR, "SFR Message from FW: %s\n",
 				vsfr->rg_data);
@@ -3338,8 +3399,6 @@ static int __response_handler(struct venus_hfi_device *device)
 	}
 
 	if (device->intr_status & VIDC_WRAPPER_INTR_CLEAR_A2HWD_BMSK) {
-		struct hfi_sfr_struct *vsfr = (struct hfi_sfr_struct *)
-			device->sfr.align_virtual_addr;
 		struct msm_vidc_cb_info info = {
 			.response_type = HAL_SYS_WATCHDOG_TIMEOUT,
 			.response.cmd = {
@@ -3347,9 +3406,7 @@ static int __response_handler(struct venus_hfi_device *device)
 			}
 		};
 
-		if (vsfr)
-			dprintk(VIDC_ERR, "SFR Message from FW: %s\n",
-					vsfr->rg_data);
+		print_sfr_message(device);
 
 		__dump_venus_debug_registers(device);
 		dprintk(VIDC_ERR, "Received watchdog timeout\n");
@@ -3377,7 +3434,7 @@ static int __response_handler(struct venus_hfi_device *device)
 		switch (info->response_type) {
 		case HAL_SYS_ERROR:
 			__dump_venus_debug_registers(device);
-			__process_sys_error(device);
+			print_sfr_message(device);
 			break;
 		case HAL_SYS_RELEASE_RESOURCE_DONE:
 			dprintk(VIDC_DBG, "Received SYS_RELEASE_RESOURCE\n");
@@ -3589,7 +3646,8 @@ static int __init_regs_and_interrupts(struct venus_hfi_device *device,
 	}
 
 	dprintk(VIDC_DBG, "HAL_DATA will be assigned now\n");
-	hal = kzalloc(sizeof(struct hal_data), GFP_KERNEL);
+	hal = (struct hal_data *)
+		kzalloc(sizeof(struct hal_data), GFP_KERNEL);
 	if (!hal) {
 		dprintk(VIDC_ERR, "Failed to alloc\n");
 		rc = -ENOMEM;
@@ -3762,6 +3820,10 @@ static void __deinit_bus(struct venus_hfi_device *device)
 	device->bus_vote = DEFAULT_BUS_VOTE;
 
 	venus_hfi_for_each_bus_reverse(device, bus) {
+		devfreq_remove_device(bus->devfreq);
+		bus->devfreq = NULL;
+		dev_set_drvdata(bus->dev, NULL);
+
 		msm_bus_scale_unregister(bus->client);
 		bus->client = NULL;
 	}
@@ -3776,6 +3838,24 @@ static int __init_bus(struct venus_hfi_device *device)
 		return -EINVAL;
 
 	venus_hfi_for_each_bus(device, bus) {
+		struct devfreq_dev_profile profile = {
+			.initial_freq = 0,
+			.polling_ms = INT_MAX,
+			.freq_table = NULL,
+			.max_state = 0,
+			.target = __devfreq_target,
+			.get_dev_status = __devfreq_get_status,
+			.exit = NULL,
+		};
+
+		/*
+		 * This is stupid, but there's no other easy way to ahold
+		 * of struct bus_info in venus_hfi_devfreq_*()
+		 */
+		WARN(dev_get_drvdata(bus->dev), "%s's drvdata already set\n",
+				dev_name(bus->dev));
+		dev_set_drvdata(bus->dev, device);
+
 		bus->client = msm_bus_scale_register(bus->master, bus->slave,
 				bus->name, false);
 		if (IS_ERR_OR_NULL(bus->client)) {
@@ -3785,6 +3865,24 @@ static int __init_bus(struct venus_hfi_device *device)
 			bus->client = NULL;
 			goto err_add_dev;
 		}
+
+		bus->devfreq_prof = profile;
+		bus->devfreq = devfreq_add_device(bus->dev,
+				&bus->devfreq_prof, bus->governor, NULL);
+		if (IS_ERR_OR_NULL(bus->devfreq)) {
+			rc = PTR_ERR(bus->devfreq) ?: -EBADHANDLE;
+			dprintk(VIDC_ERR,
+					"Failed to add devfreq device for bus %s and governor %s: %d\n",
+					bus->name, bus->governor, rc);
+			bus->devfreq = NULL;
+			goto err_add_dev;
+		}
+
+		/*
+		 * Devfreq starts monitoring immediately, since we are just
+		 * initializing stuff at this point, force it to suspend
+		 */
+		devfreq_suspend_device(bus->devfreq);
 	}
 
 	device->bus_vote = DEFAULT_BUS_VOTE;
@@ -3944,10 +4042,12 @@ static int __protect_cp_mem(struct venus_hfi_device *device)
 				memprot.cp_nonpixel_size);
 		}
 	}
+
 	desc.arginfo = SCM_ARGS(4);
 	rc = scm_call2(SCM_SIP_FNID(SCM_SVC_MP,
 		       TZBSP_MEM_PROTECT_VIDEO_VAR), &desc);
 	resp = desc.ret[0];
+
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to protect memory(%d) response: %d\n",
 				rc, resp);
@@ -4050,14 +4150,14 @@ err_reg_enable_failed:
 static int __disable_regulators(struct venus_hfi_device *device)
 {
 	struct regulator_info *rinfo;
+	int rc = 0;
 
 	dprintk(VIDC_DBG, "Disabling regulators\n");
 
 	venus_hfi_for_each_regulator_reverse(device, rinfo)
 		__disable_regulator(rinfo);
 
-	return 0;
-
+	return rc;
 }
 
 static int __venus_power_on(struct venus_hfi_device *device)
@@ -4491,7 +4591,8 @@ static struct venus_hfi_device *__add_device(u32 device_id,
 
 	dprintk(VIDC_INFO, "entered , device_id: %d\n", device_id);
 
-	hdevice = kzalloc(sizeof(struct venus_hfi_device), GFP_KERNEL);
+	hdevice = (struct venus_hfi_device *)
+			kzalloc(sizeof(struct venus_hfi_device), GFP_KERNEL);
 	if (!hdevice) {
 		dprintk(VIDC_ERR, "failed to allocate new device\n");
 		goto exit;

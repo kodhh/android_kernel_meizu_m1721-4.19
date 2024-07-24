@@ -1,6 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
-/*
- * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2018, 2020,2021 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,6 +8,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
  */
 
 #ifndef _MSM_VIDC_INTERNAL_H_
@@ -38,7 +37,7 @@
 #include "vidc_hfi_api.h"
 
 #define MSM_VIDC_DRV_NAME "msm_vidc_driver"
-//#define MSM_VIDC_VERSION KERNEL_VERSION(0, 0, 1)
+#define MSM_VIDC_VERSION KERNEL_VERSION(0, 0, 1)
 #define MAX_DEBUGFS_NAME 50
 #define DEFAULT_TIMEOUT 3
 #define DEFAULT_HEIGHT 480
@@ -128,7 +127,6 @@ static inline void DEINIT_MSM_VIDC_LIST(struct msm_vidc_list *mlist)
 {
 	mutex_destroy(&mlist->lock);
 }
-
 enum buffer_owner {
 	DRIVER,
 	FIRMWARE,
@@ -264,6 +262,7 @@ struct msm_vidc_core {
 	u32 dec_codec_supported;
 	u32 codec_count;
 	struct msm_vidc_capability *capabilities;
+	struct delayed_work fw_unload_work;
 	bool smmu_fault_handled;
 };
 
@@ -342,15 +341,6 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst);
 int msm_vidc_check_scaling_supported(struct msm_vidc_inst *inst);
 void msm_vidc_queue_v4l2_event(struct msm_vidc_inst *inst, int event_type);
 
-struct msm_vidc_format_constraint {
-	u32 fourcc;
-	u32 num_planes;
-	u32 y_max_stride;
-	u32 y_buffer_alignment;
-	u32 uv_max_stride;
-	u32 uv_buffer_alignment;
-};
-
 struct crop_info {
 	u32 nLeft;
 	u32 nTop;
@@ -367,7 +357,7 @@ struct buffer_info {
 	int buff_off[VIDEO_MAX_PLANES];
 	int size[VIDEO_MAX_PLANES];
 	unsigned long uvaddr[VIDEO_MAX_PLANES];
-	phys_addr_t device_addr[VIDEO_MAX_PLANES];
+	ion_phys_addr_t device_addr[VIDEO_MAX_PLANES];
 	struct msm_smem smem[VIDEO_MAX_PLANES];
 	enum v4l2_memory memory;
 	u32 v4l2_index;
@@ -382,14 +372,10 @@ struct buffer_info {
 };
 
 struct buffer_info *device_to_uvaddr(struct msm_vidc_list *buf_list,
-				phys_addr_t device_addr);
+				ion_phys_addr_t device_addr);
 int buf_ref_get(struct msm_vidc_inst *inst, struct buffer_info *binfo);
 int buf_ref_put(struct msm_vidc_inst *inst, struct buffer_info *binfo);
-
-int qbuf_cache_operations(struct msm_vidc_inst *inst,
-				struct buffer_info *binfo);
-int dqbuf_cache_operations(struct msm_vidc_inst *inst,
-				struct v4l2_buffer *b,
+int output_buffer_cache_invalidate(struct msm_vidc_inst *inst,
 				struct buffer_info *binfo);
 int qbuf_dynamic_buf(struct msm_vidc_inst *inst,
 			struct buffer_info *binfo);
@@ -415,6 +401,7 @@ struct msm_smem *msm_smem_user_to_kernel(struct msm_vidc_inst *inst,
 		int fd, u32 offset,
 		u32 size, enum hal_buffer buffer_type);
 
+void msm_vidc_fw_unload_handler(struct work_struct *work);
 /* XXX: normally should be in msm_vidc.h, but that's meant for public APIs,
  * whereas this is private
  */

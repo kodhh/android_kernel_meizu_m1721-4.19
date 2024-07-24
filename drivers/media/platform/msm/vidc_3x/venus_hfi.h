@@ -1,6 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
-/*
- * Copyright (c) 2012-2015, 2018-2020 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,6 +8,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
  */
 
 #ifndef __H_VENUS_HFI_H__
@@ -49,13 +48,6 @@
 
 #define VIDC_MAX_NAME_LENGTH 64
 #define VIDC_MAX_PC_SKIP_COUNT 10
-
-extern unsigned long __calc_bw(struct bus_info *bus,
-				struct msm_vidc_gov_data *vidc_data);
-
-extern int msm_vidc_table_get_target_freq(struct msm_vidc_bus_table_gov *gov,
-					struct msm_vidc_gov_data *vidc_data,
-					unsigned long *frequency);
 struct hfi_queue_table_header {
 	u32 qtbl_version;
 	u32 qtbl_size;
@@ -130,7 +122,7 @@ enum vidc_hw_reg {
 };
 
 struct vidc_mem_addr {
-	phys_addr_t align_device_addr;
+	ion_phys_addr_t align_device_addr;
 	u8 *align_virtual_addr;
 	u32 mem_size;
 	struct msm_smem mem_data;
@@ -158,7 +150,7 @@ struct vidc_iface_q_info {
 /* TODO: the __from parameter technically not required since we can figure it
  * out with some pointer magic (i.e. __thing - __thing##_tbl[0]).  If this macro
  * sees extensive use, probably worth cleaning it up but for now omitting it
- * since it introduces unnecessary complexity.
+ * since it introduces unneccessary complexity.
  */
 #define venus_hfi_for_each_thing_continue(__device, __thing, __thingy, __from) \
 	for (__thing = &(__device)->res->\
