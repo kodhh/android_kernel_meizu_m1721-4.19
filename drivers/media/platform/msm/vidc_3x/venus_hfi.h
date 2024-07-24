@@ -48,6 +48,9 @@
 
 #define VIDC_MAX_NAME_LENGTH 64
 #define VIDC_MAX_PC_SKIP_COUNT 10
+extern int msm_vidc_table_get_target_freq(struct msm_vidc_bus_table_gov *gov,
+					struct msm_vidc_gov_data *vidc_data,
+					unsigned long *frequency);
 struct hfi_queue_table_header {
 	u32 qtbl_version;
 	u32 qtbl_size;
