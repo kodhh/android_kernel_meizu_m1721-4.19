@@ -1949,7 +1949,7 @@ int buf_ref_put(struct msm_vidc_inst *inst, struct buffer_info *binfo)
 }
 
 static void handle_dynamic_buffer(struct msm_vidc_inst *inst,
-		ion_phys_addr_t device_addr, u32 flags)
+		phys_addr_t device_addr, u32 flags)
 {
 	struct buffer_info *binfo = NULL, *temp = NULL;
 
@@ -1988,7 +1988,7 @@ static void handle_dynamic_buffer(struct msm_vidc_inst *inst,
 }
 
 static int handle_multi_stream_buffers(struct msm_vidc_inst *inst,
-		ion_phys_addr_t dev_addr)
+		phys_addr_t dev_addr)
 {
 	struct internal_buf *binfo;
 	struct msm_smem *smem;

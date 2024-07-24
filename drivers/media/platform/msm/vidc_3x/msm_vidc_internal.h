@@ -357,7 +357,7 @@ struct buffer_info {
 	int buff_off[VIDEO_MAX_PLANES];
 	int size[VIDEO_MAX_PLANES];
 	unsigned long uvaddr[VIDEO_MAX_PLANES];
-	ion_phys_addr_t device_addr[VIDEO_MAX_PLANES];
+	phys_addr_t device_addr[VIDEO_MAX_PLANES];
 	struct msm_smem smem[VIDEO_MAX_PLANES];
 	enum v4l2_memory memory;
 	u32 v4l2_index;
@@ -372,7 +372,7 @@ struct buffer_info {
 };
 
 struct buffer_info *device_to_uvaddr(struct msm_vidc_list *buf_list,
-				ion_phys_addr_t device_addr);
+				phys_addr_t device_addr);
 int buf_ref_get(struct msm_vidc_inst *inst, struct buffer_info *binfo);
 int buf_ref_put(struct msm_vidc_inst *inst, struct buffer_info *binfo);
 
