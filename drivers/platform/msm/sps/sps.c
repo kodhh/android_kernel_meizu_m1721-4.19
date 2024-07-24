@@ -1,15 +1,7 @@
-/* Copyright (c) 2011-2019, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2011-2019, The Linux Foundation. All rights reserved.
  */
-
 /* Smart-Peripheral-Switch (SPS) Module. */
 
 #include <linux/types.h>	/* u32 */
@@ -675,7 +667,7 @@ int sps_get_bam_debug_info(unsigned long dev, u32 option, u32 para,
 	/* Search for the target BAM device */
 	bam = sps_h2bam(dev);
 	if (bam == NULL) {
-		pr_err("sps:Can't find any BAM with handle 0x%pK.",
+		pr_err("sps:Can't find any BAM with handle 0x%pK.\n",
 					(void *)dev);
 		mutex_unlock(&sps->lock);
 		return SPS_ERROR;
@@ -1349,7 +1341,8 @@ int sps_connect(struct sps_pipe *h, struct sps_connect *connect)
 	}
 
 	mutex_lock(&bam->lock);
-	SPS_DBG2(bam, "sps:sps_connect: bam %pa src 0x%pK dest 0x%pK mode %s",
+	SPS_DBG2(bam, "sps:%s: bam %pa src 0x%pK dest 0x%pK mode %s",
+			__func__,
 			BAM_ID(bam),
 			(void *)connect->source,
 			(void *)connect->destination,
@@ -1416,7 +1409,8 @@ int sps_disconnect(struct sps_pipe *h)
 	}
 
 	SPS_DBG2(bam,
-		"sps:sps_disconnect: bam %pa src 0x%pK dest 0x%pK mode %s",
+		"sps:%s: bam %pa src 0x%pK dest 0x%pK mode %s",
+		__func__,
 		BAM_ID(bam),
 		(void *)pipe->connect.source,
 		(void *)pipe->connect.destination,
@@ -2246,13 +2240,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 	ok = sps_bam_device_init(bam);
 	mutex_unlock(&bam->lock);
 	if (ok) {
-		ipc_log_context_destroy(bam->ipc_log0);
-		ipc_log_context_destroy(bam->ipc_log1);
-		ipc_log_context_destroy(bam->ipc_log2);
-		ipc_log_context_destroy(bam->ipc_log3);
-		ipc_log_context_destroy(bam->ipc_log4);
-
-		SPS_ERR(sps, "sps:Fail to init BAM device: phys %pa",
+		SPS_ERR(bam, "sps:Fail to init BAM device: phys %pa",
 			&bam->props.phys_addr);
 		goto exit_err;
 	}
@@ -2687,7 +2675,7 @@ static int get_platform_data(struct platform_device *pdev)
 	pdata = pdev->dev.platform_data;
 
 	if (pdata == NULL) {
-		SPS_ERR(sps, "sps:%s:inavlid platform data.\n", __func__);
+		SPS_ERR(sps, "sps:%s:invalid platform data.\n", __func__);
 		sps->bamdma_restricted_pipes = 0;
 		return -EINVAL;
 	}
