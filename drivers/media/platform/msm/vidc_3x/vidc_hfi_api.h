@@ -1,4 +1,6 @@
-/* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,7 +10,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
 #ifndef __VIDC_HFI_API_H__
@@ -68,6 +69,7 @@
 #define VIDC_MAX_SESSIONS               32
 #define VIDC_MAX_DECODE_SESSIONS        16
 #define VIDC_MAX_ENCODE_SESSIONS        16
+
 
 enum vidc_status {
 	VIDC_ERR_NONE = 0x0,

@@ -1,4 +1,6 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,7 +10,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
 #define CREATE_TRACE_POINTS
@@ -17,10 +18,10 @@
 #include "msm_vidc_debug.h"
 #include "vidc_hfi_api.h"
 
-int msm_vidc_debug = 0;
-int msm_vidc_debug_out = 0;
-int msm_vidc_fw_debug = 0;
-int msm_vidc_fw_debug_mode = 0;
+int msm_vidc_debug = VIDC_ERR | VIDC_WARN;
+int msm_vidc_debug_out = VIDC_OUT_PRINTK;
+int msm_vidc_fw_debug = 0x18;
+int msm_vidc_fw_debug_mode = 1;
 int msm_vidc_fw_low_power_mode = 1;
 int msm_vidc_hw_rsp_timeout = 1000;
 bool msm_vidc_fw_coverage = true;
@@ -29,7 +30,7 @@ bool msm_vidc_enc_dcvs_mode = true;
 bool msm_vidc_sys_idle_indicator = true;
 int msm_vidc_firmware_unload_delay = 15000;
 bool msm_vidc_thermal_mitigation_disabled = true;
-bool msm_vidc_bitrate_clock_scaling = 1;
+bool msm_vidc_bitrate_clock_scaling = true;
 bool msm_vidc_debug_timeout = true;
 
 #define MAX_DBG_BUF_SIZE 4096
@@ -42,12 +43,6 @@ struct core_inst_pair {
 	struct msm_vidc_core *core;
 	struct msm_vidc_inst *inst;
 };
-
-static int core_info_open(struct inode *inode, struct file *file)
-{
-	file->private_data = inode->i_private;
-	return 0;
-}
 
 static u32 write_str(char *buffer,
 		size_t size, const char *fmt, ...)
@@ -119,18 +114,13 @@ err_fw_info:
 }
 
 static const struct file_operations core_info_fops = {
-	.open = core_info_open,
+	.open = simple_open,
 	.read = core_info_read,
 };
 
-static int trigger_ssr_open(struct inode *inode, struct file *file)
-{
-	file->private_data = inode->i_private;
-	return 0;
-}
-
 static ssize_t trigger_ssr_write(struct file *filp, const char __user *buf,
-		size_t count, loff_t *ppos) {
+		size_t count, loff_t *ppos)
+{
 	unsigned long ssr_trigger_val = 0;
 	int rc = 0;
 	struct msm_vidc_core *core = filp->private_data;
@@ -162,7 +152,7 @@ exit:
 }
 
 static const struct file_operations ssr_fops = {
-	.open = trigger_ssr_open,
+	.open = simple_open,
 	.write = trigger_ssr_write,
 };
 
@@ -227,7 +217,7 @@ failed_create_dir:
 struct dentry *msm_vidc_debugfs_init_core(struct msm_vidc_core *core,
 		struct dentry *parent)
 {
-	struct dentry *dir;
+	struct dentry *dir = NULL;
 	char debugfs_name[MAX_DEBUGFS_NAME];
 
 	if (!core) {
@@ -237,24 +227,22 @@ struct dentry *msm_vidc_debugfs_init_core(struct msm_vidc_core *core,
 
 	snprintf(debugfs_name, MAX_DEBUGFS_NAME, "core%d", core->id);
 	dir = debugfs_create_dir(debugfs_name, parent);
-	if (IS_ERR_OR_NULL(dir)) {
-		dprintk(VIDC_DBG, "Failed to create debugfs for msm_vidc\n");
-		goto failed_create_file;
+	if (!dir) {
+		dprintk(VIDC_ERR, "Failed to create debugfs for msm_vidc\n");
+		goto failed_create_dir;
 	}
 
-	if (IS_ERR_OR_NULL(debugfs_create_file("info", 0444, dir, core, &core_info_fops))) {
+	if (!debugfs_create_file("info", 0444, dir, core, &core_info_fops)) {
 		dprintk(VIDC_ERR, "debugfs_create_file: fail\n");
-		goto failed_create_file;
+		goto failed_create_dir;
 	}
-	if (IS_ERR_OR_NULL(debugfs_create_file("trigger_ssr", 0200,
-			dir, core, &ssr_fops))) {
+	if (!debugfs_create_file("trigger_ssr", 0200,
+			dir, core, &ssr_fops)) {
 		dprintk(VIDC_ERR, "debugfs_create_file: fail\n");
-		goto failed_create_file;
+		goto failed_create_dir;
 	}
-failed_create_file:
-	debugfs_remove_recursive(dir);
 failed_create_dir:
-	return NULL;
+	return dir;
 }
 
 static int inst_info_open(struct inode *inode, struct file *file)
@@ -438,7 +426,7 @@ static const struct file_operations inst_info_fops = {
 struct dentry *msm_vidc_debugfs_init_inst(struct msm_vidc_inst *inst,
 		struct dentry *parent)
 {
-	struct dentry *dir, *info;
+	struct dentry *dir = NULL, *info = NULL;
 	char debugfs_name[MAX_DEBUGFS_NAME];
 	struct core_inst_pair *idata = NULL;
 
@@ -458,14 +446,14 @@ struct dentry *msm_vidc_debugfs_init_inst(struct msm_vidc_inst *inst,
 	idata->inst = inst;
 
 	dir = debugfs_create_dir(debugfs_name, parent);
-	if (IS_ERR_OR_NULL(dir)) {
-		dprintk(VIDC_DBG, "Failed to create debugfs for msm_vidc\n");
+	if (!dir) {
+		dprintk(VIDC_ERR, "Failed to create debugfs for msm_vidc\n");
 		goto failed_create_dir;
 	}
 
 	info = debugfs_create_file("info", 0444, dir,
 			idata, &inst_info_fops);
-	if (IS_ERR_OR_NULL(info)) {
+	if (!info) {
 		dprintk(VIDC_ERR, "debugfs_create_file: fail\n");
 		goto failed_create_file;
 	}
@@ -476,10 +464,11 @@ struct dentry *msm_vidc_debugfs_init_inst(struct msm_vidc_inst *inst,
 
 failed_create_file:
 	debugfs_remove_recursive(dir);
+	dir = NULL;
 failed_create_dir:
 	kfree(idata);
 exit:
-	return NULL;
+	return dir;
 }
 
 void msm_vidc_debugfs_deinit_inst(struct msm_vidc_inst *inst)

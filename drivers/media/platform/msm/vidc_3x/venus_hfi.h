@@ -1,4 +1,6 @@
-/* Copyright (c) 2012-2015, 2018 The Linux Foundation. All rights reserved.
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright (c) 2012-2015, 2018-2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,7 +10,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
 #ifndef __H_VENUS_HFI_H__
@@ -48,6 +49,10 @@
 
 #define VIDC_MAX_NAME_LENGTH 64
 #define VIDC_MAX_PC_SKIP_COUNT 10
+
+extern unsigned long __calc_bw(struct bus_info *bus,
+				struct msm_vidc_gov_data *vidc_data);
+
 extern int msm_vidc_table_get_target_freq(struct msm_vidc_bus_table_gov *gov,
 					struct msm_vidc_gov_data *vidc_data,
 					unsigned long *frequency);
@@ -153,7 +158,7 @@ struct vidc_iface_q_info {
 /* TODO: the __from parameter technically not required since we can figure it
  * out with some pointer magic (i.e. __thing - __thing##_tbl[0]).  If this macro
  * sees extensive use, probably worth cleaning it up but for now omitting it
- * since it introduces unneccessary complexity.
+ * since it introduces unnecessary complexity.
  */
 #define venus_hfi_for_each_thing_continue(__device, __thing, __thingy, __from) \
 	for (__thing = &(__device)->res->\
@@ -232,7 +237,7 @@ struct venus_hfi_device {
 	struct msm_vidc_gov_data bus_vote;
 	bool power_enabled;
 	struct mutex lock;
-	hfi_cmd_response_callback callback;
+	msm_vidc_callback callback;
 	struct vidc_mem_addr iface_q_table;
 	struct vidc_mem_addr qdss;
 	struct vidc_mem_addr sfr;

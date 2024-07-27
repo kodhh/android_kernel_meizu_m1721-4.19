@@ -1,4 +1,6 @@
-/* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,7 +10,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
 #include <linux/sched.h>
@@ -500,7 +501,8 @@ int map_and_register_buf(struct msm_vidc_inst *inst, struct v4l2_buffer *b)
 			binfo->mapped[i] = false;
 			binfo->smem[i] = *same_fd_handle;
 		} else {
-			binfo->smem[i].buffer_type = binfo->type;
+			binfo->smem[i].buffer_type = get_hal_buffer_type(
+							inst, b);
 			binfo->smem[i].fd = binfo->fd[i];
 			binfo->smem[i].offset = binfo->buff_off[i];
 			binfo->smem[i].size = binfo->size[i];
@@ -656,7 +658,6 @@ int qbuf_cache_operations(struct msm_vidc_inst *inst,
 	enum smem_cache_ops cache_op;
 	bool skip;
 	int i = 0, rc = 0;
-	unsigned int rate;
 
 	skip = true;
 
@@ -679,10 +680,7 @@ int qbuf_cache_operations(struct msm_vidc_inst *inst,
 				}
 			}
 		} else if (inst->session_type == MSM_VIDC_ENCODER) {
-
-			rate = inst->prop.operating_rate >> 16;
-			if (binfo->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE &&
-				rate == 0) {
+			if (binfo->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 				if (!i) { /* yuv */
 					skip = false;
 					offset = binfo->buff_off[i];
@@ -785,7 +783,8 @@ int dqbuf_cache_operations(struct msm_vidc_inst *inst,
 }
 
 static bool valid_v4l2_buffer(struct v4l2_buffer *b,
-		struct msm_vidc_inst *inst) {
+		struct msm_vidc_inst *inst)
+{
 	enum vidc_ports port =
 		!V4L2_TYPE_IS_MULTIPLANAR(b->type) ? MAX_PORT_NUM :
 		b->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE ? CAPTURE_PORT :
@@ -1159,13 +1158,12 @@ static inline int vb2_bufq_init(struct msm_vidc_inst *inst,
 static int setup_event_queue(void *inst,
 				struct video_device *pvdev)
 {
-	int rc = 0;
 	struct msm_vidc_inst *vidc_inst = (struct msm_vidc_inst *)inst;
 
 	v4l2_fh_init(&vidc_inst->event_handler, pvdev);
 	v4l2_fh_add(&vidc_inst->event_handler);
 
-	return rc;
+	return 0;
 }
 
 int msm_vidc_subscribe_event(void *inst,
@@ -1261,7 +1259,7 @@ void *msm_vidc_open(int core_id, int session_type)
 		goto err_invalid_core;
 	}
 
-	pr_debug(VIDC_DBG_TAG "Opening video instance: %pK, %d\n",
+	pr_info(VIDC_DBG_TAG "Opening video instance: %pK, %d\n",
 		VIDC_MSG_PRIO2STRING(VIDC_INFO), inst, session_type);
 	mutex_init(&inst->sync_lock);
 	mutex_init(&inst->bufq[CAPTURE_PORT].lock);
@@ -1290,6 +1288,7 @@ void *msm_vidc_open(int core_id, int session_type)
 		i <= SESSION_MSG_INDEX(SESSION_MSG_END); i++) {
 		init_completion(&inst->completions[i]);
 	}
+
 	if (session_type == MSM_VIDC_DECODER) {
 		msm_vdec_inst_init(inst);
 		rc = msm_vdec_ctrl_init(inst);
@@ -1435,20 +1434,17 @@ int msm_vidc_destroy(struct msm_vidc_inst *inst)
 	mutex_destroy(&inst->lock);
 
 	msm_vidc_debugfs_deinit_inst(inst);
-	pr_debug(VIDC_DBG_TAG "Closed video instance: %pK\n",
+	pr_info(VIDC_DBG_TAG "Closed video instance: %pK\n",
 			VIDC_MSG_PRIO2STRING(VIDC_INFO), inst);
 	kfree(inst);
 	return 0;
 }
-
 static void close_helper(struct kref *kref)
 {
 	struct msm_vidc_inst *inst = container_of(kref,
-			struct msm_vidc_inst, kref);
-
+				struct msm_vidc_inst, kref);
 	msm_vidc_destroy(inst);
 }
-
 int msm_vidc_close(void *instance)
 {
 	struct msm_vidc_inst *inst = instance;

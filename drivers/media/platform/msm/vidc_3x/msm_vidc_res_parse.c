@@ -1,4 +1,6 @@
-/* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,7 +10,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
 #include <asm/dma-iommu.h>
@@ -60,12 +61,10 @@ static size_t get_u32_array_num_elements(struct device_node *np,
 fail_read:
 	return 0;
 }
-
 static bool is_compatible(char *compat)
 {
 	return !!of_find_compatible_node(NULL, NULL, compat);
 }
-
 static inline enum imem_type read_imem_type(struct platform_device *pdev)
 {
 	return is_compatible("qcom,msm-ocmem") ? IMEM_OCMEM :
@@ -642,7 +641,6 @@ static int msm_vidc_load_cycles_per_mb_table(
 error:
 	return rc;
 }
-
 /* A comparator to compare loads (needed later on) */
 static int cmp(const void *a, const void *b)
 {
@@ -650,7 +648,6 @@ static int cmp(const void *a, const void *b)
 	return ((struct load_freq_table *)b)->load -
 		((struct load_freq_table *)a)->load;
 }
-
 static int msm_vidc_load_freq_table(struct msm_vidc_platform_resources *res)
 {
 	int rc = 0;
@@ -836,14 +833,12 @@ static int msm_vidc_populate_bus(struct device *dev,
 		goto err_bus;
 	}
 
-	rc = of_property_read_string(dev->of_node, "qcom,bus-governor",
-			&bus->governor);
-	if (rc) {
-		rc = 0;
-		dprintk(VIDC_DBG,
-				"'qcom,bus-governor' not found, default to performance governor\n");
-		bus->governor = "performance";
-	}
+	rc = of_property_read_string(dev->of_node, "qcom,mode",
+			&bus->mode);
+	if (!rc && !strcmp(bus->mode, PERF_GOV))
+		bus->is_prfm_gov_used = true;
+	else
+		bus->is_prfm_gov_used = false;
 
 	rc = of_property_read_u32_array(dev->of_node, "qcom,bus-range-kbps",
 			range, ARRAY_SIZE(range));
@@ -860,8 +855,8 @@ static int msm_vidc_populate_bus(struct device *dev,
 
 	buses->count++;
 	bus->dev = dev;
-	dprintk(VIDC_DBG, "Found bus %s [%d->%d] with governor %s\n",
-			bus->name, bus->master, bus->slave, bus->governor);
+	dprintk(VIDC_DBG, "Found bus %s [%d->%d] with mode %s\n",
+			bus->name, bus->master, bus->slave, bus->mode);
 
 err_bus:
 	return rc;
@@ -1380,7 +1375,6 @@ err_load_reg_table:
 err_load_freq_table:
 	return rc;
 }
-
 static int msm_vidc_setup_context_bank(struct context_bank_info *cb,
 		struct device *dev)
 {
@@ -1402,17 +1396,6 @@ static int msm_vidc_setup_context_bank(struct context_bank_info *cb,
 	}
 
 	cb->domain = iommu_get_domain_for_dev(cb->dev);
-
-	/*
-	 * configure device segment size and segment boundary to ensure
-	 * iommu mapping returns one mapping (which is required for partial
-	 * cache operations)
-	 */
-	if (!dev->dma_parms)
-		dev->dma_parms =
-			devm_kzalloc(dev, sizeof(*dev->dma_parms), GFP_KERNEL);
-	dma_set_max_seg_size(dev, DMA_BIT_MASK(32));
-	dma_set_seg_boundary(dev, (unsigned long)DMA_BIT_MASK(64));
 
 	/*
 	 * configure device segment size and segment boundary to ensure

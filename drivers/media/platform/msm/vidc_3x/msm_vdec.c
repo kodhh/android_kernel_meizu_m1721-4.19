@@ -1,4 +1,6 @@
-/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,7 +10,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
 #include <linux/slab.h>
@@ -251,14 +252,14 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 		.name = "Extradata Type",
 		.type = V4L2_CTRL_TYPE_MENU,
 		.minimum = V4L2_MPEG_VIDC_EXTRADATA_NONE,
-		.maximum = V4L2_MPEG_VIDC_EXTRADATA_VPX_COLORSPACE,
+		.maximum = V4L2_MPEG_VIDC_EXTRADATA_YUV_STATS,
 		.default_value = V4L2_MPEG_VIDC_EXTRADATA_NONE,
 		.menu_skip_mask = ~(
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_NONE) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_MB_QUANTIZATION) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_INTERLACE_VIDEO) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_VC1_FRAMEDISP) |
-			(1 << V4L2_MPEG_VIDC_EXTRADATA_VC1_SEQDISP) |
+			(1ULL << V4L2_MPEG_VIDC_EXTRADATA_VC1_SEQDISP) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_TIMESTAMP) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_S3D_FRAME_PACKING) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_FRAME_RATE) |
@@ -280,7 +281,8 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 			(1 <<
 			V4L2_MPEG_VIDC_EXTRADATA_CONTENT_LIGHT_LEVEL_SEI) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_VUI_DISPLAY) |
-			(1 << V4L2_MPEG_VIDC_EXTRADATA_VPX_COLORSPACE)
+			(1 << V4L2_MPEG_VIDC_EXTRADATA_VPX_COLORSPACE) |
+			(1ULL << V4L2_MPEG_VIDC_EXTRADATA_YUV_STATS)
 			),
 		.qmenu = mpeg_video_vidc_extradata,
 	},
@@ -1147,8 +1149,8 @@ int msm_vdec_g_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 			if (!plane_sizes[i]) {
 				f->fmt.pix_mp.plane_fmt[i].sizeimage =
 					get_frame_size(inst, fmt, f->type, i);
-				plane_sizes[i] = f->fmt.pix_mp.plane_fmt[i].
-					sizeimage;
+				plane_sizes[i] =
+					f->fmt.pix_mp.plane_fmt[i].sizeimage;
 			} else
 				f->fmt.pix_mp.plane_fmt[i].sizeimage =
 					plane_sizes[i];
@@ -2034,11 +2036,11 @@ static int try_get_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 			switch (hprop.h264_entropy) {
 			case HAL_H264_ENTROPY_CAVLC:
 				ctrl->val =
-				 V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CAVLC;
+					V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CAVLC;
 				break;
 			case HAL_H264_ENTROPY_CABAC:
 				ctrl->val =
-				 V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CABAC;
+					V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CABAC;
 				break;
 			case HAL_UNUSED_ENTROPY:
 				rc = -ENOTSUPP;
@@ -2572,11 +2574,18 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		}
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_OPERATING_RATE:
-		dprintk(VIDC_DBG,
-			"inst(%pK) operating rate changed from %d to %d\n",
-			inst, inst->prop.operating_rate >> 16,
-				ctrl->val >> 16);
-		inst->prop.operating_rate = ctrl->val;
+		if ((ctrl->val >> 16) < inst->capability.frame_rate.min ||
+			 (ctrl->val >> 16) > inst->capability.frame_rate.max) {
+			dprintk(VIDC_ERR, "Invalid operating rate %u\n",
+				(ctrl->val >> 16));
+			rc = -ENOTSUPP;
+		} else {
+			dprintk(VIDC_DBG,
+				"inst(%pK) operating rate changed from %d to %d\n",
+				inst, inst->prop.operating_rate >> 16,
+					ctrl->val >> 16);
+			inst->prop.operating_rate = ctrl->val;
+		}
 		break;
 	default:
 		break;
@@ -2807,4 +2816,5 @@ int msm_vdec_ctrl_init(struct msm_vidc_inst *inst)
 	return msm_comm_ctrl_init(inst, msm_vdec_ctrls,
 		ARRAY_SIZE(msm_vdec_ctrls), &msm_vdec_ctrl_ops);
 }
+
 

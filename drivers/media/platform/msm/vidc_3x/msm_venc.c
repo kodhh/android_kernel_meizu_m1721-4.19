@@ -1,4 +1,6 @@
-/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,7 +10,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 #include <linux/slab.h>
 #include "msm_vidc_internal.h"
@@ -386,6 +387,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_2_0) |
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_3_0) |
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_4_0) |
+		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_4_5) |
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_5_0) |
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_6_0) |
 		(1 << V4L2_MPEG_VIDC_VIDEO_H263_LEVEL_7_0)
@@ -715,14 +717,14 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.name = "Intra Refresh Mode",
 		.type = V4L2_CTRL_TYPE_MENU,
 		.minimum = V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_NONE,
-		.maximum = V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOM,
+		.maximum = V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOMMODE,
 		.default_value = V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_NONE,
 		.menu_skip_mask = ~(
 		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_NONE) |
 		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_CYCLIC) |
 		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_ADAPTIVE) |
 		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_CYCLIC_ADAPTIVE) |
-		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOM)
+		(1 << V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOMMODE)
 		),
 		.qmenu = intra_refresh_modes,
 	},
@@ -823,14 +825,14 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.name = "Extradata Type",
 		.type = V4L2_CTRL_TYPE_MENU,
 		.minimum = V4L2_MPEG_VIDC_EXTRADATA_NONE,
-		.maximum = V4L2_MPEG_VIDC_EXTRADATA_ENC_FRAME_QP,
+		.maximum = V4L2_MPEG_VIDC_EXTRADATA_YUV_STATS,
 		.default_value = V4L2_MPEG_VIDC_EXTRADATA_NONE,
 		.menu_skip_mask = ~(
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_NONE) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_MB_QUANTIZATION) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_INTERLACE_VIDEO) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_VC1_FRAMEDISP) |
-			(1 << V4L2_MPEG_VIDC_EXTRADATA_VC1_SEQDISP) |
+			(1ULL << V4L2_MPEG_VIDC_EXTRADATA_VC1_SEQDISP) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_TIMESTAMP) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_S3D_FRAME_PACKING) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_FRAME_RATE) |
@@ -844,7 +846,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_ASPECT_RATIO) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_LTR) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_METADATA_MBI) |
-			(1 << V4L2_MPEG_VIDC_EXTRADATA_YUV_STATS)|
+			(1ULL << V4L2_MPEG_VIDC_EXTRADATA_YUV_STATS)|
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_ROI_QP) |
 			(1 << V4L2_MPEG_VIDC_EXTRADATA_PQ_INFO) |
 			(1ULL << V4L2_MPEG_VIDC_EXTRADATA_ENC_FRAME_QP)
@@ -1713,8 +1715,8 @@ static int msm_venc_queue_setup(struct vb2_queue *q,
 		*num_planes = 1;
 
 		*num_buffers = inst->buff_req.buffer[0].buffer_count_actual =
-			max(*num_buffers, inst->buff_req.buffer[0].
-				buffer_count_min);
+			max(*num_buffers,
+				 inst->buff_req.buffer[0].buffer_count_min);
 
 		temp = *num_buffers;
 
@@ -2303,7 +2305,7 @@ static inline int venc_v4l2_to_hal(int id, int value)
 			return HAL_INTRA_REFRESH_NONE;
 		case V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_CYCLIC:
 			return HAL_INTRA_REFRESH_CYCLIC;
-		case V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOM:
+		case V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_RANDOMMODE:
 			return HAL_INTRA_REFRESH_RANDOM;
 		case V4L2_CID_MPEG_VIDC_VIDEO_INTRA_REFRESH_ADAPTIVE:
 			return HAL_INTRA_REFRESH_ADAPTIVE;
@@ -3317,10 +3319,10 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 
 		switch (ctrl->val) {
 		case V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE:
-			enable.enable = 0;
+			enable.enable = false;
 			break;
 		case V4L2_MPEG_VIDEO_HEADER_MODE_JOINED_WITH_I_FRAME:
-			enable.enable = 1;
+			enable.enable = true;
 			break;
 		case V4L2_MPEG_VIDEO_HEADER_MODE_JOINED_WITH_1ST_FRAME:
 		default:
@@ -3376,10 +3378,10 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 
 		switch (ctrl->val) {
 		case V4L2_MPEG_VIDC_VIDEO_AU_DELIMITER_DISABLED:
-			enable.enable = 0;
+			enable.enable = false;
 			break;
 		case V4L2_MPEG_VIDC_VIDEO_AU_DELIMITER_ENABLED:
-			enable.enable = 1;
+			enable.enable = true;
 			break;
 		default:
 			rc = -ENOTSUPP;
@@ -3445,11 +3447,11 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		property_id = HAL_CONFIG_VPE_DEINTERLACE;
 		switch (ctrl->val) {
 		case V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_ENABLED:
-			enable.enable = 1;
+			enable.enable = true;
 			break;
 		case V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_DISABLED:
 		default:
-			enable.enable = 0;
+			enable.enable = false;
 			break;
 		}
 		pdata = &enable;
@@ -3747,9 +3749,9 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		property_id = HAL_PARAM_VENC_LOW_LATENCY;
 		if (ctrl->val ==
 			V4L2_CID_MPEG_VIDC_VIDEO_LOWLATENCY_ENABLE)
-			enable.enable = 1;
+			enable.enable = true;
 		else
-			enable.enable = 0;
+			enable.enable = false;
 		pdata = &enable;
 		break;
 	}
@@ -3757,10 +3759,10 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		property_id = HAL_PARAM_VENC_H264_TRANSFORM_8x8;
 		switch (ctrl->val) {
 		case V4L2_MPEG_VIDC_VIDEO_H264_TRANSFORM_8x8_ENABLE:
-			enable.enable = 1;
+			enable.enable = true;
 			break;
 		case V4L2_MPEG_VIDC_VIDEO_H264_TRANSFORM_8x8_DISABLE:
-			enable.enable = 0;
+			enable.enable = false;
 			break;
 		default:
 			dprintk(VIDC_ERR,

@@ -1,4 +1,6 @@
-/*Copyright (c) 2012-2016, 2018 The Linux Foundation. All rights reserved.
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright (c) 2012-2016, 2018, 2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,7 +10,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
 #ifndef _MSM_VIDC_COMMON_H_
@@ -65,7 +66,7 @@ int msm_comm_release_output_buffers(struct msm_vidc_inst *inst);
 int msm_comm_force_cleanup(struct msm_vidc_inst *inst);
 int msm_comm_suspend(int core_id);
 enum hal_extradata_id msm_comm_get_hal_extradata_index(
-	enum v4l2_mpeg_vidc_extradata index);
+	enum v4l2_mpeg_vidc3x_extradata index);
 enum hal_buffer_layout_type msm_comm_get_hal_buffer_layout(
 	enum v4l2_mpeg_vidc_video_mvc_layout index);
 struct hal_buffer_requirements *get_buff_req_buffer(

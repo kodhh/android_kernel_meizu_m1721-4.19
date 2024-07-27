@@ -1,4 +1,6 @@
-/* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -8,13 +10,11 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
 #ifndef __MSM_VIDC_RESOURCES_H__
 #define __MSM_VIDC_RESOURCES_H__
 
-#include <linux/devfreq.h>
 #include <linux/platform_device.h>
 #include <media/msm_vidc.h>
 #define MAX_BUFFER_TYPES 32
@@ -116,11 +116,10 @@ struct bus_info {
 	int master;
 	int slave;
 	unsigned int range[2];
-	const char *governor;
 	struct device *dev;
-	struct devfreq_dev_profile devfreq_prof;
-	struct devfreq *devfreq;
 	struct msm_bus_client_handle *client;
+	bool is_prfm_gov_used;
+	const char *mode;
 };
 
 struct bus_set {
@@ -194,7 +193,6 @@ struct msm_vidc_platform_resources {
 	uint32_t imem_size;
 	enum imem_type imem_type;
 	uint32_t max_load;
-	uint32_t  target_version;
 	struct platform_device *pdev;
 	struct regulator_set regulator_set;
 	struct clock_set clock_set;

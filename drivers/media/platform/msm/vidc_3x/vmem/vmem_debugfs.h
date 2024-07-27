@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2014, 2018 The Linux Foundation. All rights reserved.
  *
@@ -10,6 +11,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+
 #ifndef __VMEM_DEBUGFS_H__
 #define __VMEM_DEBUGFS_H__
 
