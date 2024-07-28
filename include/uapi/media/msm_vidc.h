@@ -12,18 +12,6 @@
 #define MSM_VIDC_4x_1 0x1
 #define MSM_VIDC_EXTRADATA_FRAME_QP_ADV 0x1
 
-
-static inline unsigned int VENUS_EXTRADATA_SIZE(int width, int height)
-{
-	(void)height;
-	(void)width;
-	/*
-	 * In the future, calculate the size based on the w/h but just
-	 * hardcode it for now since 16K satisfies all current usecases.
-	 */
-	return 16 * 1024;
-}
-
 #define V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD   (V4L2_CID_MPEG_MSM_VIDC_BASE+5)
 
 #define V4L2_CID_MPEG_VIDC_VIDEO_STREAM_OUTPUT_MODE \
