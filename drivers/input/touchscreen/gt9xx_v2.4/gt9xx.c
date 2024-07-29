@@ -52,7 +52,6 @@ static char tp_lockdown_info[128];
 static char tp_fw_version[10];
 
 static char tp_info_summary[80] = "";
-extern int set_usb_charge_mode_par;
 
 int gt9xx_id;
 int gt9xx_flag;
@@ -144,13 +143,72 @@ void gtp_esd_switch(struct i2c_client *, s32);
 
 #if defined(CONFIG_GTP_GLOVE_MODE)
 int glove_tpd_halt = 0;
-static int gtp_glove_mode_status;
+static int gtp_glove_mode_status = 0;
 struct kobject *goodix_glove_kobj = NULL;
 static u8 gtp_glove_config[GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH]
 	= {GTP_REG_CONFIG_DATA >> 8, GTP_REG_CONFIG_DATA & 0xff};
+
+static struct device *tp_glove_dev;
+
+static ssize_t gt9xx_mido_gtp_glove_onoff_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+        return sprintf(buf, "%d\n", gtp_glove_mode_status);
+}
+
+static ssize_t gt9xx_mido_gtp_glove_onoff_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t size)
+{
+	struct goodix_ts_data *ts = NULL;
+	char ret;
+
+	ts = dev_get_drvdata(dev);
+
+	if (ts->gtp_is_suspend)
+		return -EINVAL;
+
+	sscanf(buf, "%c",  &ret);
+
+	printk("GTP ret : %c\n", ret);
+	if (ret == '1') {
+		gtp_glove_mode_status = 1;
+		GTP_INFO("send glove1");
+		gtp_send_cfg(i2c_connect_client);
+	} else if (ret == '2') {
+		gtp_glove_mode_status = 2;
+		GTP_INFO("send glove2");
+		gtp_send_cfg(i2c_connect_client);
+	} else if (ret == '0') {
+		gtp_glove_mode_status = 0;
+		GTP_INFO("send glove0");
+		gtp_send_cfg(i2c_connect_client);
+	}
+
+	return size;
+}
+
+static DEVICE_ATTR(glove_enable, 0644, gt9xx_mido_gtp_glove_onoff_show, gt9xx_mido_gtp_glove_onoff_store);
+
+void gt9xx_tp_glove_register(struct goodix_ts_data *data)
+{
+	int rc = 0;
+	struct class *tp_device_class = NULL;
+	tp_device_class = class_create(THIS_MODULE, "tp_glove");
+	tp_glove_dev = device_create(tp_device_class, NULL, 0, NULL, "device");
+	if (IS_ERR(tp_glove_dev))
+		pr_err("Failed to create device(glove_ctrl)!\n");
+
+
+	rc = device_create_file(tp_glove_dev, &dev_attr_glove_enable);
+	if (rc < 0)
+		pr_err("Failed to create device file(%s)!\n", dev_attr_glove_enable.attr.name);
+	dev_set_drvdata(tp_glove_dev, data);
+
+	printk("~~~~~ %s enable!!!!!\n", __func__);
+
+}
 #endif
-
-
 
 #if GTP_COMPATIBLE_MODE
 extern s32 i2c_read_bytes(struct i2c_client *client, u16 addr, u8 *buf, s32 len);
@@ -2809,8 +2867,6 @@ static int goodix_ts_probe(struct i2c_client *client, const struct i2c_device_id
 	if (ret < 0) {
 		GTP_ERROR("Read color failed.");
 	}
-	set_usb_charge_mode_par = 3;
-	printk("set_usb_charge_mode_par = %d\n",set_usb_charge_mode_par);
 	gt91xx_config_proc = proc_create(GT91XX_CONFIG_PROC_FILE, 0666, NULL, &config_proc_ops);
 	if (gt91xx_config_proc == NULL) {
 		GTP_ERROR("create_proc_entry %s failed\n", GT91XX_CONFIG_PROC_FILE);
@@ -2840,6 +2896,9 @@ static int goodix_ts_probe(struct i2c_client *client, const struct i2c_device_id
         }
 	gt9xx_mido_proc_init(client->dev.kobj.sd);
 
+#if defined(CONFIG_GTP_GLOVE_MODE)
+	gt9xx_tp_glove_register(ts);
+#endif
 
 #if GTP_ESD_PROTECT
 	gtp_esd_switch(client, SWITCH_ON);
