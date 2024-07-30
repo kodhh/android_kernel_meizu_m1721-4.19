@@ -2242,7 +2242,9 @@ check_drain:
 
 			if (last_migrated_pfn < current_block_start) {
 				cpu = get_cpu();
+				local_lock_irq(swapvec_lock);
 				lru_add_drain_cpu(cpu);
+				local_unlock_irq(swapvec_lock);
 				drain_local_pages(cc->zone);
 				put_cpu();
 				/* No more flushing until we migrate again */
