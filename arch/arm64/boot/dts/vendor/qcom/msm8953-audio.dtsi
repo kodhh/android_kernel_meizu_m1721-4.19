@@ -20,10 +20,10 @@
 };
 
 &soc {
-	qcom,msm-audio-apr {
+	audio_apr: qcom,msm-audio-apr {
 		compatible = "qcom,msm-audio-apr";
-		msm_audio_apr_dummy {
-			compatible = "qcom,msm-audio-apr-dummy";
+		q6core: q6core {
+			compatible = "qcom,q6core-audio";
 		};
 	};
 
