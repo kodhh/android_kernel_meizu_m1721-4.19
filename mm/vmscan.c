@@ -54,7 +54,6 @@
 #include <linux/shmem_fs.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
-#include <linux/simple_lmk.h>
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -141,6 +140,13 @@ struct scan_control {
 		unsigned int file_taken;
 		unsigned int taken;
 	} nr;
+
+	/*
+	 * Reclaim pages from a vma. If the page is shared by other tasks
+	 * it is zapped from a vma without reclaim so it ends up remaining
+	 * on memory until last task zap it.
+	 */
+	struct vm_area_struct *target_vma;
 
 	/* for recording the reclaimed slab by now */
 	struct reclaim_state reclaim_state;
@@ -1226,7 +1232,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			nr_congested++;
 
 		/* page_update_gen() tried to promote this page? */
-		if (lru_gen_enabled() && !skip_reference_check &&
+		if (lru_gen_enabled() && !force_reclaim &&
 		    page_mapped(page) && PageReferenced(page))
 			goto keep_locked;
 
@@ -1725,6 +1731,25 @@ static __always_inline void update_lru_sizes(struct lruvec *lruvec,
 	}
 
 }
+
+#ifdef CONFIG_CMA
+/*
+ * It is waste of effort to scan and reclaim CMA pages if it is not available
+ * for current allocation context. Kswapd can not be enrolled as it can not
+ * distinguish this scenario by using sc->gfp_mask = GFP_KERNEL
+ */
+static bool skip_cma(struct page *page, struct scan_control *sc)
+{
+	return !current_is_kswapd() &&
+			gfpflags_to_migratetype(sc->gfp_mask) != MIGRATE_MOVABLE &&
+			get_pageblock_migratetype(page) == MIGRATE_CMA;
+}
+#else
+static bool skip_cma(struct page *page, struct scan_control *sc)
+{
+	return false;
+}
+#endif
 
 /*
  * zone_lru_lock is heavily contended.  Some of the functions that

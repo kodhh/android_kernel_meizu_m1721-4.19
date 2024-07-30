@@ -1048,7 +1048,6 @@ static int exec_mmap(struct mm_struct *mm)
 	tsk->mm->vmacache_seqnum = 0;
 	vmacache_flush(tsk);
 	lru_gen_add_mm(mm);
-	preempt_enable_rt();
 	task_unlock(tsk);
 	lru_gen_use_mm(mm);
 	if (old_mm) {

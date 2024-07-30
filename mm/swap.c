@@ -499,7 +499,7 @@ void __lru_cache_add_active_or_unevictable(struct page *page,
 {
 	VM_BUG_ON_PAGE(PageLRU(page), page);
 
-	if (likely((vma->vm_flags & (VM_LOCKED | VM_SPECIAL)) != VM_LOCKED)) {
+	if (likely((vma_flags & (VM_LOCKED | VM_SPECIAL)) != VM_LOCKED)) {
 		if (!lru_gen_enabled())
 			SetPageActive(page);
 	} else if (!TestSetPageMlocked(page)) {
@@ -682,7 +682,7 @@ void deactivate_file_page(struct page *page)
 
 		if (!pagevec_add(pvec, page) || PageCompound(page))
 			pagevec_lru_move_fn(pvec, lru_deactivate_file_fn, NULL);
-		put_locked_var(swapvec_lock, lru_deactivate_file_pvecs);
+		put_cpu_var(lru_deactivate_file_pvecs);
 	}
 }
 
@@ -697,27 +697,6 @@ void deactivate_file_page(struct page *page)
 void deactivate_page(struct page *page)
 {
 	if (PageLRU(page) && !PageUnevictable(page) && (PageActive(page) || lru_gen_enabled())) {
-		struct pagevec *pvec = &get_locked_var(swapvec_lock,
-							lru_deactivate_pvecs);
-
-		get_page(page);
-		if (!pagevec_add(pvec, page) || PageCompound(page))
-			pagevec_lru_move_fn(pvec, lru_deactivate_fn, NULL);
-		put_locked_var(swapvec_lock, lru_deactivate_pvecs);
-	}
-}
-
-/*
- * deactivate_page - deactivate a page
- * @page: page to deactivate
- *
- * deactivate_page() moves @page to the inactive list if @page was on the active
- * list and was not an unevictable page.  This is done to accelerate the reclaim
- * of @page.
- */
-void deactivate_page(struct page *page)
-{
-	if (PageLRU(page) && PageActive(page) && !PageUnevictable(page)) {
 		struct pagevec *pvec = &get_cpu_var(lru_deactivate_pvecs);
 
 		get_page(page);
