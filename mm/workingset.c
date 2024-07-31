@@ -302,18 +302,6 @@ void lru_gen_refault(struct page *page, void *shadow)
 unlock:
 	rcu_read_unlock();
 }
-
-#else /* !CONFIG_LRU_GEN */
-
-static void *lru_gen_eviction(struct page *page)
-{
-	return NULL;
-}
-
-static void lru_gen_refault(struct page *page, void *shadow)
-{
-}
-
 #endif /* CONFIG_LRU_GEN */
 
 /**
