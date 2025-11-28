@@ -1,0 +1,41 @@
+name: Build Yureka2 Kernel with Clang
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    # 根据项目需求选择 windows-latest 或 ubuntu-latest
+    runs-on: ubuntu-latest  # 若在Windows上编译，通常需改为 windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Clang and Dependencies
+      run: |
+        # 在Ubuntu上安装Clang及编译依赖（示例命令，具体包名请根据你的WSL2内核需求调整）
+        sudo apt-get update
+        sudo apt-get install -y git clang lld flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler python3
+
+    - name: Configure Kernel (示例)
+      run: |
+        # 此处为示例配置命令，请替换为你的WSL2内核实际配置命令
+        # 例如：make ARCH=arm64 CC=clang defconfig
+        make ARCH=arm64 CC=clang LD=ld.lld vendor/YUREKA2_defconfig O=out
+
+    - name: Build Kernel with Clang
+      run: |
+        # 此处为示例编译命令，请替换为你的WSL2内核实际编译命令
+        # 例如：make ARCH=arm64 CC=clang -j$(nproc)
+        make ARCH=arm64 CC=clang LD=ld.lld O=out -j$(nproc)
+
+    # 可选：上传构建产物
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-build
+        path: out/arch/arm64/boot/zImage-dtb
