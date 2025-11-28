@@ -11,12 +11,12 @@ jobs:
     # 根据项目需求选择 windows-latest 或 ubuntu-latest
     runs-on: ubuntu-latest  # 若在Windows上编译，通常需改为 windows-latest
 
-steps:
-  - name: Checkout code with submodules
-    uses: actions/checkout@v4
-    with:
-      submodules: recursive
-      token: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install Clang and Dependencies
       run: |
