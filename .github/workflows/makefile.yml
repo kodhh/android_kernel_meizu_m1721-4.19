@@ -34,7 +34,7 @@ jobs:
       run: |
         # 此处为示例编译命令，请替换为你的WSL2内核实际编译命令
         # 例如：make ARCH=arm64 CC=clang -j$(nproc)
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CC=clang LD=ld.lld O=out -j$(nproc)
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CC=clang LD=ld.lld KSU_VERSION=$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 10200) O=out -j$(nproc)
 
     # 可选：上传构建产物
     - name: Upload Build Artifacts
