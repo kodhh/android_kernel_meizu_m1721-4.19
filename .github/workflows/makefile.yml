@@ -28,7 +28,7 @@ jobs:
       run: |
         # 此处为示例配置命令，请替换为你的WSL2内核实际配置命令
         # 例如：make ARCH=arm64 CC=clang defconfig
-        make ARCH=arm64 CC=clang LD=ld.lld vendor/YUREKA2_defconfig O=out
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CC=clang LD=ld.lld vendor/YUREKA2_defconfig O=out
 
     - name: Build Kernel with Clang
       run: |
