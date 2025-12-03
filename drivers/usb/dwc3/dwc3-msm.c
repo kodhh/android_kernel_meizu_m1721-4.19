@@ -1144,17 +1144,17 @@ static int gsi_updatexfer_for_ep(struct usb_ep *ep,
 	return ret;
 }
 
-/**
- * Perform EndXfer on particular GSI EP.
- *
- * @usb_ep - pointer to usb_ep instance.
- */
+/*
+* Perform EndXfer on particular GSI EP.
+*
+* @usb_ep - pointer to usb_ep instance.
+*/
 static void gsi_endxfer_for_ep(struct usb_ep *ep)
 {
 	struct dwc3_ep *dep = to_dwc3_ep(ep);
 	struct dwc3	*dwc = dep->dwc;
 
-	dwc3_stop_active_transfer(dwc, dep->number, true);
+	dwc3_stop_active_transfer(dwc, dep->number, true, true);
 }
 
 /**
