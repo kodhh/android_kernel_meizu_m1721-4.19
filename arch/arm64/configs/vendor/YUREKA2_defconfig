@@ -2448,7 +2448,7 @@ CONFIG_POWER_SUPPLY=y
 # Qualcomm Technologies, Inc. Charger and Fuel Gauge support
 #
 # CONFIG_QPNP_SMB2 is not set
-CONFIG_QPNP_SMB5=y
+# CONFIG_QPNP_SMB5 is not set
 # CONFIG_QPNP_SMBLITE is not set
 CONFIG_QPNP_VM_BMS=y
 CONFIG_QPNP_LINEAR_CHARGER=y
@@ -2465,7 +2465,6 @@ CONFIG_QPNP_FG=y
 CONFIG_QPNP_QG=y
 # CONFIG_HL6111R is not set
 # CONFIG_SMB1398_CHARGER is not set
-CONFIG_QPNP_TYPEC=y
 
 #
 # Miscellaneous Qualcomm Technologies, Inc. power support
