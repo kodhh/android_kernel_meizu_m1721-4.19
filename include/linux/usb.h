@@ -415,11 +415,6 @@ struct usb_host_bos {
 	struct usb_ptm_cap_descriptor	*ptm_cap;
 	struct usb_config_summary_descriptor	*config_summary;
 	unsigned int	num_config_summary_desc;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 int __usb_get_extra_descriptor(char *buffer, unsigned size,
@@ -493,11 +488,6 @@ struct usb_bus {
 					 * wakeup is detected or an interface
 					 * driver starts I/O.
 					 */
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 struct usb_dev_state;

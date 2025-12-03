@@ -237,6 +237,7 @@
 
 /* Global Configuration Register */
 #define DWC3_GCTL_PWRDNSCALE(n)	((n) << 19)
+#define DWC3_GCTL_PWRDNSCALEMASK (0xFFF80000)
 #define DWC3_GCTL_U2RSTECN	BIT(16)
 #define DWC3_GCTL_RAMCLKSEL(x)	(((x) & DWC3_GCTL_CLK_MASK) << 6)
 #define DWC3_GCTL_CLK_BUS	(0)
@@ -259,7 +260,11 @@
 #define DWC3_GCTL_GBLHIBERNATIONEN	BIT(1)
 #define DWC3_GCTL_DSBLCLKGTNG		BIT(0)
 
+/* Global User Control Register */
+#define DWC3_GUCTL_REFCLKPER            (0x3FF << 22)
+
 /* Global User Control 1 Register */
+#define DWC3_GUCTL1_PARKMODE_DISABLE_SS	BIT(17)
 #define DWC3_GUCTL1_TX_IPGAP_LINECHECK_DIS	BIT(28)
 #define DWC3_GUCTL1_DEV_L1_EXIT_BY_HW	BIT(24)
 #define DWC3_GUCTL1_IP_GAP_ADD_ON(n)	(n << 21)
@@ -331,6 +336,10 @@
 #define DWC3_GTXFIFOSIZ_TXFDEF(n)	((n) & 0xffff)
 #define DWC3_GTXFIFOSIZ_TXFSTADDR(n)	((n) & 0xffff0000)
 
+/* Global RX Fifo Size Register */
+#define DWC31_GRXFIFOSIZ_RXFDEP(n)	((n) & 0x7fff)	/* DWC_usb31 only */
+#define DWC3_GRXFIFOSIZ_RXFDEP(n)	((n) & 0xffff)
+
 /* Global Event Size Registers */
 #define DWC3_GEVNTSIZ_INTMASK		BIT(31)
 #define DWC3_GEVNTSIZ_SIZE(n)		((n) & 0xffff)
@@ -387,6 +396,11 @@
 /* Global Frame Length Adjustment Register */
 #define DWC3_GFLADJ_30MHZ_SDBND_SEL		BIT(7)
 #define DWC3_GFLADJ_30MHZ_MASK			0x3f
+
+#define DWC3_GFLADJ_REFCLK_240MHZDECR_PLS1      (1 << 31)
+#define DWC3_GFLADJ_REFCLK_240MHZ_DECR          (0x7F << 24)
+#define DWC3_GFLADJ_REFCLK_LPM_SEL              (1 << 23)
+#define DWC3_GFLADJ_REFCLK_FLADJ                (0x3FFF << 8)
 
 /* Global User Control Register 2 */
 #define DWC3_GUCTL2_RST_ACTBITLATER		BIT(14)
@@ -639,6 +653,19 @@
 struct dwc3_trb;
 
 /**
+ * struct dwc3_gadget_ep_cmd_params - representation of endpoint command
+ * parameters
+ * @param2: third parameter
+ * @param1: second parameter
+ * @param0: first parameter
+ */
+struct dwc3_gadget_ep_cmd_params {
+	u32	param2;
+	u32	param1;
+	u32	param0;
+};
+
+/**
  * struct dwc3_event_buffer - Software event buffer representation
  * @buf: _THE_ buffer
  * @cache: The buffer cache used in the threaded interrupt
@@ -789,6 +816,7 @@ struct dwc3_ep {
 	struct dwc3_ep_events	dbg_ep_events_diff;
 	struct timespec		dbg_ep_events_ts;
 	int			fifo_depth;
+	struct dwc3_gadget_ep_cmd_params ep_cfg_init_params;
 };
 
 enum dwc3_phy {
@@ -1108,6 +1136,8 @@ struct dwc3_scratchpad_array {
  *			change quirk.
  * @dis_tx_ipgap_linecheck_quirk: set if we disable u2mac linestate
  *			check during HS transmit.
+ * @parkmode_disable_ss_quirk: set if we need to disable all SuperSpeed
+ *			instances in park mode.
  * @tx_de_emphasis_quirk: set if we enable Tx de-emphasis quirk
  * @tx_de_emphasis: Tx de-emphasis value
  * 	0	- -6dB de-emphasis
@@ -1311,11 +1341,13 @@ struct dwc3 {
 	unsigned		dis_u2_freeclk_exists_quirk:1;
 	unsigned		dis_del_phy_power_chg_quirk:1;
 	unsigned		dis_tx_ipgap_linecheck_quirk:1;
+	unsigned		parkmode_disable_ss_quirk:1;
 
 	unsigned		tx_de_emphasis_quirk:1;
 	unsigned		ssp_u3_u0_quirk:1;
 	unsigned		tx_de_emphasis:2;
 	unsigned		err_evt_seen:1;
+	unsigned                is_drd:1;
 	unsigned		disable_clk_gating:1;
 	unsigned		enable_bus_suspend:1;
 	unsigned		usb3_u1u2_disable:1;
@@ -1510,19 +1542,6 @@ union dwc3_event {
 	struct dwc3_event_depevt	depevt;
 	struct dwc3_event_devt		devt;
 	struct dwc3_event_gevt		gevt;
-};
-
-/**
- * struct dwc3_gadget_ep_cmd_params - representation of endpoint command
- * parameters
- * @param2: third parameter
- * @param1: second parameter
- * @param0: first parameter
- */
-struct dwc3_gadget_ep_cmd_params {
-	u32	param2;
-	u32	param1;
-	u32	param0;
 };
 
 /*
