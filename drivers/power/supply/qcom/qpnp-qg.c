@@ -3066,7 +3066,6 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 		chip->bp.fastchg_curr_ma = -EINVAL;
 	}
 
-/*
 	/*
 	 * Update the max fcc values based on QG subtype including
 	 * error margins.
@@ -3081,6 +3080,7 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 		chip->bp.qg_profile_version = -EINVAL;
 	}
 
+#if 0
 	/*
 	 * Currently step charging thresholds should be read only for Vbatt
 	 * based and not for SOC based.
@@ -3139,6 +3139,7 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 		}
 	}
 */
+#endif
 
 	qg_dbg(chip, QG_DEBUG_PROFILE, "profile=%s FV=%duV FCC=%dma\n",
 			chip->bp.batt_type_str, chip->bp.float_volt_uv,
