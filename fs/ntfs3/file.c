@@ -3,15 +3,16 @@
  *
  * Copyright (C) 2019-2021 Paragon Software GmbH, All rights reserved.
  *
- *  Regular file handling primitives for NTFS-based filesystems.
- *
+ *  regular file handling primitives for ntfs-based filesystems
  */
-
 #include <linux/backing-dev.h>
 #include <linux/buffer_head.h>
 #include <linux/compat.h>
 #include <linux/falloc.h>
 #include <linux/fiemap.h>
+#include <linux/msdos_fs.h> /* FAT_IOCTL_XXX */
+#include <linux/nls.h>
+#include <linux/uio.h>
 
 #include "debug.h"
 #include "ntfs.h"
@@ -50,12 +51,19 @@ static long ntfs_ioctl(struct file *filp, u32 cmd, unsigned long arg)
 {
 	struct inode *inode = file_inode(filp);
 	struct ntfs_sb_info *sbi = inode->i_sb->s_fs_info;
+	u32 __user *user_attr = (u32 __user *)arg;
 
 	switch (cmd) {
+	case FAT_IOCTL_GET_ATTRIBUTES:
+		return put_user(le32_to_cpu(ntfs_i(inode)->std_fa), user_attr);
+
+	case FAT_IOCTL_GET_VOLUME_ID:
+		return put_user(sbi->volume.ser_num, user_attr);
+
 	case FITRIM:
 		return ntfs_ioctl_fitrim(sbi, arg);
 	}
-	return -ENOTTY; /* Inappropriate ioctl for device. */
+	return -ENOTTY; /* Inappropriate ioctl for device */
 }
 
 #ifdef CONFIG_COMPAT
@@ -67,14 +75,27 @@ static long ntfs_compat_ioctl(struct file *filp, u32 cmd, unsigned long arg)
 #endif
 
 /*
- * ntfs_getattr - inode_operations::getattr
+ * inode_operations::getattr
  */
-int ntfs_getattr(const struct path *path,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+int ntfs_getattr(struct user_namespace *mnt_userns, const struct path *path,
 		 struct kstat *stat, u32 request_mask, u32 flags)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+int ntfs_getattr(const struct path *path, struct kstat *stat,
+		 u32 request_mask, u32 flags)
+#else
+int ntfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
+		 struct kstat *stat)
+#endif
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 	struct inode *inode = d_inode(path->dentry);
 	struct ntfs_inode *ni = ntfs_i(inode);
+#else
+	struct inode *inode = d_inode(dentry);
+#endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 	if (is_compressed(ni))
 		stat->attributes |= STATX_ATTR_COMPRESSED;
 
@@ -82,12 +103,18 @@ int ntfs_getattr(const struct path *path,
 		stat->attributes |= STATX_ATTR_ENCRYPTED;
 
 	stat->attributes_mask |= STATX_ATTR_COMPRESSED | STATX_ATTR_ENCRYPTED;
+#endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+	generic_fillattr(mnt_userns, inode, stat);
+#else
 	generic_fillattr(inode, stat);
+#endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 	stat->result_mask |= STATX_BTIME;
 	stat->btime = ni->i_crtime;
-	stat->blksize = ni->mi.sbi->cluster_size; /* 512, 1K, ..., 2M */
+#endif
 
 	return 0;
 }
@@ -163,7 +190,7 @@ static int ntfs_extend_initialized_size(struct file *file,
 
 		zero_user_segment(page, zerofrom, PAGE_SIZE);
 
-		/* This function in any case puts page. */
+		/* this function in any case puts page*/
 		err = pagecache_write_end(file, mapping, pos, len, len, page,
 					  fsdata);
 		if (err < 0)
@@ -178,6 +205,8 @@ next:
 		cond_resched();
 	}
 
+	mark_inode_dirty(inode);
+
 	return 0;
 
 out:
@@ -188,93 +217,9 @@ out:
 }
 
 /*
- * ntfs_zero_range - Helper function for punch_hole.
+ * ntfs_sparse_cluster
  *
- * It zeroes a range [vbo, vbo_to).
- */
-static int ntfs_zero_range(struct inode *inode, u64 vbo, u64 vbo_to)
-{
-	int err = 0;
-	struct address_space *mapping = inode->i_mapping;
-	u32 blocksize = 1 << inode->i_blkbits;
-	pgoff_t idx = vbo >> PAGE_SHIFT;
-	u32 z_start = vbo & (PAGE_SIZE - 1);
-	pgoff_t idx_end = (vbo_to + PAGE_SIZE - 1) >> PAGE_SHIFT;
-	loff_t page_off;
-	struct buffer_head *head, *bh;
-	u32 bh_next, bh_off, z_end;
-	sector_t iblock;
-	struct page *page;
-
-	for (; idx < idx_end; idx += 1, z_start = 0) {
-		page_off = (loff_t)idx << PAGE_SHIFT;
-		z_end = (page_off + PAGE_SIZE) > vbo_to ? (vbo_to - page_off)
-							: PAGE_SIZE;
-		iblock = page_off >> inode->i_blkbits;
-
-		page = find_or_create_page(mapping, idx,
-					   mapping_gfp_constraint(mapping,
-								  ~__GFP_FS));
-		if (!page)
-			return -ENOMEM;
-
-		if (!page_has_buffers(page))
-			create_empty_buffers(page, blocksize, 0);
-
-		bh = head = page_buffers(page);
-		bh_off = 0;
-		do {
-			bh_next = bh_off + blocksize;
-
-			if (bh_next <= z_start || bh_off >= z_end)
-				continue;
-
-			if (!buffer_mapped(bh)) {
-				ntfs_get_block(inode, iblock, bh, 0);
-				/* Unmapped? It's a hole - nothing to do. */
-				if (!buffer_mapped(bh))
-					continue;
-			}
-
-			/* Ok, it's mapped. Make sure it's up-to-date. */
-			if (PageUptodate(page))
-				set_buffer_uptodate(bh);
-
-			if (!buffer_uptodate(bh)) {
-				lock_buffer(bh);
-				bh->b_end_io = end_buffer_read_sync;
-				get_bh(bh);
-				submit_bh(REQ_OP_READ, 0, bh);
-
-				wait_on_buffer(bh);
-				if (!buffer_uptodate(bh)) {
-					unlock_page(page);
-					put_page(page);
-					err = -EIO;
-					goto out;
-				}
-			}
-
-			mark_buffer_dirty(bh);
-
-		} while (bh_off = bh_next, iblock += 1,
-			 head != (bh = bh->b_this_page));
-
-		zero_user_segment(page, z_start, z_end);
-
-		unlock_page(page);
-		put_page(page);
-		cond_resched();
-	}
-out:
-	mark_inode_dirty(inode);
-	return err;
-}
-
-/*
- * ntfs_sparse_cluster - Helper function to zero a new allocated clusters.
- *
- * NOTE: 512 <= cluster size <= 2M
+ * Helper function to zero a new allocated clusters
  */
 void ntfs_sparse_cluster(struct inode *inode, struct page *page0, CLST vcn,
 			 CLST len)
@@ -309,6 +254,13 @@ void ntfs_sparse_cluster(struct inode *inode, struct page *page0, CLST vcn,
 		if ((from || PAGE_SIZE != to) &&
 		    likely(!page_has_buffers(page))) {
 			create_empty_buffers(page, blocksize, 0);
+			if (!page_has_buffers(page)) {
+				ntfs_inode_err(
+					inode,
+					"failed to allocate page buffers.");
+				/*err = -ENOMEM;*/
+				goto unlock_page;
+			}
 		}
 
 		if (page_has_buffers(page)) {
@@ -337,6 +289,7 @@ void ntfs_sparse_cluster(struct inode *inode, struct page *page0, CLST vcn,
 			set_page_dirty(page);
 		}
 
+unlock_page:
 		if (idx != idx0) {
 			unlock_page(page);
 			put_page(page);
@@ -347,66 +300,64 @@ void ntfs_sparse_cluster(struct inode *inode, struct page *page0, CLST vcn,
 }
 
 /*
- * ntfs_file_mmap - file_operations::mmap
+ * file_operations::mmap
  */
 static int ntfs_file_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct address_space *mapping = file->f_mapping;
 	struct inode *inode = mapping->host;
 	struct ntfs_inode *ni = ntfs_i(inode);
-	u64 from = ((u64)vma->vm_pgoff << PAGE_SHIFT);
+	u64 to, from = ((u64)vma->vm_pgoff << PAGE_SHIFT);
 	bool rw = vma->vm_flags & VM_WRITE;
 	int err;
 
 	if (is_encrypted(ni)) {
-		ntfs_inode_warn(inode, "mmap encrypted not supported");
-		return -EOPNOTSUPP;
+		ntfs_inode_warn(inode,
+				"mmap is not supported for encrypted files");
+		err = -EOPNOTSUPP;
+		goto out;
 	}
 
-	if (is_dedup(ni)) {
-		ntfs_inode_warn(inode, "mmap deduplicated not supported");
-		return -EOPNOTSUPP;
+	if (!rw)
+		goto do_map;
+
+	if (is_compressed(ni)) {
+		ntfs_inode_warn(
+			inode,
+			"mmap(write) is not supported for compressed files");
+		err = -EOPNOTSUPP;
+		goto out;
 	}
 
-	if (is_compressed(ni) && rw) {
-		ntfs_inode_warn(inode, "mmap(write) compressed not supported");
-		return -EOPNOTSUPP;
-	}
+	to = min_t(loff_t, i_size_read(inode),
+		   from + vma->vm_end - vma->vm_start);
 
-	if (rw) {
-		u64 to = min_t(loff_t, i_size_read(inode),
-			       from + vma->vm_end - vma->vm_start);
+	if (is_sparsed(ni)) {
+		/* allocate clusters for rw map */
+		struct ntfs_sb_info *sbi = inode->i_sb->s_fs_info;
+		CLST vcn, lcn, len;
+		CLST end = bytes_to_cluster(sbi, to);
+		bool new;
 
-		if (is_sparsed(ni)) {
-			/* Allocate clusters for rw map. */
-			struct ntfs_sb_info *sbi = inode->i_sb->s_fs_info;
-			CLST lcn, len;
-			CLST vcn = from >> sbi->cluster_bits;
-			CLST end = bytes_to_cluster(sbi, to);
-			bool new;
-
-			for (; vcn < end; vcn += len) {
-				err = attr_data_get_block(ni, vcn, 1, &lcn,
-							  &len, &new);
-				if (err)
-					goto out;
-
-				if (!new)
-					continue;
-				ntfs_sparse_cluster(inode, NULL, vcn, 1);
-			}
-		}
-
-		if (ni->i_valid < to) {
-			inode_lock(inode);
-			err = ntfs_extend_initialized_size(file, ni,
-							   ni->i_valid, to);
-			inode_unlock(inode);
+		for (vcn = from >> sbi->cluster_bits; vcn < end; vcn += len) {
+			err = attr_data_get_block(ni, vcn, 1, &lcn, &len, &new);
 			if (err)
 				goto out;
+			if (!new)
+				continue;
+			ntfs_sparse_cluster(inode, NULL, vcn, 1);
 		}
 	}
 
+	if (ni->i_valid < to) {
+		inode_lock(inode);
+		err = ntfs_extend_initialized_size(file, ni, ni->i_valid, to);
+		inode_unlock(inode);
+		if (err)
+			goto out;
+	}
+
+do_map:
 	err = generic_file_mmap(file, vma);
 out:
 	return err;
@@ -424,7 +375,7 @@ static int ntfs_extend(struct inode *inode, loff_t pos, size_t count,
 	if (end <= inode->i_size && !extend_init)
 		return 0;
 
-	/* Mark rw ntfs as dirty. It will be cleared at umount. */
+	/*mark rw ntfs as dirty. it will be cleared at umount*/
 	ntfs_set_state(ni->mi.sbi, NTFS_DIRTY_DIRTY);
 
 	if (end > inode->i_size) {
@@ -485,13 +436,13 @@ static int ntfs_truncate(struct inode *inode, loff_t new_size)
 
 	new_valid = ntfs_up_block(sb, min_t(u64, ni->i_valid, new_size));
 
-	truncate_setsize(inode, new_size);
-
 	ni_lock(ni);
+
+	truncate_setsize(inode, new_size);
 
 	down_write(&ni->file.run_lock);
 	err = attr_set_size(ni, ATTR_DATA, NULL, 0, &ni->file.run, new_size,
-			    &new_valid, ni->mi.sbi->options->prealloc, NULL);
+			    &new_valid, true, NULL);
 	up_write(&ni->file.run_lock);
 
 	if (new_valid < ni->i_valid)
@@ -518,8 +469,6 @@ static int ntfs_truncate(struct inode *inode, loff_t new_size)
 }
 
 /*
- * ntfs_fallocate
- *
  * Preallocate space for a file. This implements ntfs's fallocate file
  * operation, which gets called from sys_fallocate system call. User
  * space requests 'len' bytes at 'vbo'. If FALLOC_FL_KEEP_SIZE is set
@@ -537,17 +486,14 @@ static long ntfs_fallocate(struct file *file, int mode, loff_t vbo, loff_t len)
 	loff_t i_size;
 	int err;
 
-	/* No support for dir. */
+	/* No support for dir */
 	if (!S_ISREG(inode->i_mode))
 		return -EOPNOTSUPP;
 
-	/* Return error if mode is not supported. */
+	/* Return error if mode is not supported */
 	if (mode & ~(FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE |
-		     FALLOC_FL_COLLAPSE_RANGE)) {
-		ntfs_inode_warn(inode, "fallocate(0x%x) is not supported",
-				mode);
+		     FALLOC_FL_COLLAPSE_RANGE))
 		return -EOPNOTSUPP;
-	}
 
 	ntfs_set_state(sbi, NTFS_DIRTY_DIRTY);
 
@@ -555,17 +501,22 @@ static long ntfs_fallocate(struct file *file, int mode, loff_t vbo, loff_t len)
 	i_size = inode->i_size;
 
 	if (WARN_ON(ni->ni_flags & NI_FLAG_COMPRESSED_MASK)) {
-		/* Should never be here, see ntfs_file_open. */
+		/* should never be here, see ntfs_file_open*/
 		err = -EOPNOTSUPP;
 		goto out;
 	}
 
 	if (mode & FALLOC_FL_PUNCH_HOLE) {
-		u32 frame_size;
-		loff_t mask, vbo_a, end_a, tmp;
-
 		if (!(mode & FALLOC_FL_KEEP_SIZE)) {
 			err = -EINVAL;
+			goto out;
+		}
+
+		if (!is_sparsed(ni) && !is_compressed(ni)) {
+			ntfs_inode_warn(
+				inode,
+				"punch_hole only for sparsed/compressed files");
+			err = -EOPNOTSUPP;
 			goto out;
 		}
 
@@ -579,49 +530,11 @@ static long ntfs_fallocate(struct file *file, int mode, loff_t vbo, loff_t len)
 		if (err)
 			goto out;
 
-		inode_dio_wait(inode);
-
 		truncate_pagecache(inode, vbo_down);
 
-		if (!is_sparsed(ni) && !is_compressed(ni)) {
-			/*
-			 * Normal file, can't make hole.
-			 * TODO: Try to find way to save info about hole.
-			 */
-			err = -EOPNOTSUPP;
-			goto out;
-		}
-
 		ni_lock(ni);
-		err = attr_punch_hole(ni, vbo, len, &frame_size);
+		err = attr_punch_hole(ni, vbo, len);
 		ni_unlock(ni);
-		if (err != E_NTFS_NOTALIGNED)
-			goto out;
-
-		/* Process not aligned punch. */
-		mask = frame_size - 1;
-		vbo_a = (vbo + mask) & ~mask;
-		end_a = end & ~mask;
-
-		tmp = min(vbo_a, end);
-		if (tmp > vbo) {
-			err = ntfs_zero_range(inode, vbo, tmp);
-			if (err)
-				goto out;
-		}
-
-		if (vbo < end_a && end_a < end) {
-			err = ntfs_zero_range(inode, end_a, end);
-			if (err)
-				goto out;
-		}
-
-		/* Aligned punch_hole */
-		if (end_a > vbo_a) {
-			ni_lock(ni);
-			err = attr_punch_hole(ni, vbo_a, end_a - vbo_a, NULL);
-			ni_unlock(ni);
-		}
 	} else if (mode & FALLOC_FL_COLLAPSE_RANGE) {
 		if (mode & ~FALLOC_FL_COLLAPSE_RANGE) {
 			err = -EINVAL;
@@ -639,15 +552,12 @@ static long ntfs_fallocate(struct file *file, int mode, loff_t vbo, loff_t len)
 
 		/*
 		 * Write data that will be shifted to preserve them
-		 * when discarding page cache below.
+		 * when discarding page cache below
 		 */
 		err = filemap_write_and_wait_range(inode->i_mapping, end,
 						   LLONG_MAX);
 		if (err)
 			goto out;
-
-		/* Wait for existing dio to complete. */
-		inode_dio_wait(inode);
 
 		truncate_pagecache(inode, vbo_down);
 
@@ -656,15 +566,9 @@ static long ntfs_fallocate(struct file *file, int mode, loff_t vbo, loff_t len)
 		ni_unlock(ni);
 	} else {
 		/*
-		 * Normal file: Allocate clusters, do not change 'valid' size.
+		 * normal file: allocate clusters, do not change 'valid' size
 		 */
-		loff_t new_size = max(end, i_size);
-
-		err = inode_newsize_ok(inode, new_size);
-		if (err)
-			goto out;
-
-		err = ntfs_set_size(inode, new_size);
+		err = ntfs_set_size(inode, max(end, i_size));
 		if (err)
 			goto out;
 
@@ -676,10 +580,10 @@ static long ntfs_fallocate(struct file *file, int mode, loff_t vbo, loff_t len)
 			bool new;
 
 			/*
-			 * Allocate but do not zero new clusters. (see below comments)
-			 * This breaks security: One can read unused on-disk areas.
-			 * Zeroing these clusters may be too long.
-			 * Maybe we should check here for root rights?
+			 * allocate but not zero new clusters (see below comments)
+			 * this breaks security (one can read unused on-disk areas)
+			 * zeroing these clusters may be too long
+			 * may be we should check here for root rights?
 			 */
 			for (; vcn < cend; vcn += clen) {
 				err = attr_data_get_block(ni, vcn, cend - vcn,
@@ -690,24 +594,25 @@ static long ntfs_fallocate(struct file *file, int mode, loff_t vbo, loff_t len)
 					continue;
 
 				/*
-				 * Unwritten area.
-				 * NTFS is not able to store several unwritten areas.
-				 * Activate 'ntfs_sparse_cluster' to zero new allocated clusters.
+				 * Unwritten area
+				 * NTFS is not able to store several unwritten areas
+				 * Activate 'ntfs_sparse_cluster' to zero new allocated clusters
 				 *
 				 * Dangerous in case:
 				 * 1G of sparsed clusters + 1 cluster of data =>
 				 * valid_size == 1G + 1 cluster
 				 * fallocate(1G) will zero 1G and this can be very long
-				 * xfstest 016/086 will fail without 'ntfs_sparse_cluster'.
+				 * xfstest 016/086 will fail without 'ntfs_sparse_cluster'
 				 */
-				ntfs_sparse_cluster(inode, NULL, vcn,
-						    min(vcn_v - vcn, clen));
+				/*ntfs_sparse_cluster(inode, NULL, vcn,
+				 *		    min(vcn_v - vcn, clen));
+				 */
 			}
 		}
 
 		if (mode & FALLOC_FL_KEEP_SIZE) {
 			ni_lock(ni);
-			/* True - Keep preallocated. */
+			/*true - keep preallocated*/
 			err = attr_set_size(ni, ATTR_DATA, NULL, 0,
 					    &ni->file.run, i_size, &ni->i_valid,
 					    true, NULL);
@@ -715,23 +620,26 @@ static long ntfs_fallocate(struct file *file, int mode, loff_t vbo, loff_t len)
 		}
 	}
 
-out:
-	if (err == -EFBIG)
-		err = -ENOSPC;
-
 	if (!err) {
 		inode->i_ctime = inode->i_mtime = current_time(inode);
 		mark_inode_dirty(inode);
 	}
+out:
+	if (err == -EFBIG)
+		err = -ENOSPC;
 
 	inode_unlock(inode);
 	return err;
 }
 
 /*
- * ntfs3_setattr - inode_operations::setattr
+ * inode_operations::setattr
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+int ntfs3_setattr(struct user_namespace *mnt_userns, struct dentry *dentry,
+#else
 int ntfs3_setattr(struct dentry *dentry,
+#endif
 		  struct iattr *attr)
 {
 	struct super_block *sb = dentry->d_sb;
@@ -742,15 +650,19 @@ int ntfs3_setattr(struct dentry *dentry,
 	umode_t mode = inode->i_mode;
 	int err;
 
-	if (sbi->options->noacsrules) {
-		/* "No access rules" - Force any changes of time etc. */
+	if (sbi->options.no_acs_rules) {
+		/* "no access rules" - force any changes of time etc. */
 		attr->ia_valid |= ATTR_FORCE;
-		/* and disable for editing some attributes. */
+		/* and disable for editing some attributes */
 		attr->ia_valid &= ~(ATTR_UID | ATTR_GID | ATTR_MODE);
 		ia_valid = attr->ia_valid;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+	err = setattr_prepare(mnt_userns, dentry, attr);
+#else
 	err = setattr_prepare(dentry, attr);
+#endif
 	if (err)
 		goto out;
 
@@ -758,13 +670,13 @@ int ntfs3_setattr(struct dentry *dentry,
 		loff_t oldsize = inode->i_size;
 
 		if (WARN_ON(ni->ni_flags & NI_FLAG_COMPRESSED_MASK)) {
-			/* Should never be here, see ntfs_file_open(). */
+			/* should never be here, see ntfs_file_open*/
 			err = -EOPNOTSUPP;
 			goto out;
 		}
 		inode_dio_wait(inode);
 
-		if (attr->ia_size <= oldsize)
+		if (attr->ia_size < oldsize)
 			err = ntfs_truncate(inode, attr->ia_size);
 		else if (attr->ia_size > oldsize)
 			err = ntfs_extend(inode, attr->ia_size, 0, NULL);
@@ -775,22 +687,28 @@ int ntfs3_setattr(struct dentry *dentry,
 		ni->ni_flags |= NI_FLAG_UPDATE_PARENT;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+	setattr_copy(mnt_userns, inode, attr);
+#else
 	setattr_copy(inode, attr);
+#endif
 
 	if (mode != inode->i_mode) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+		err = ntfs_acl_chmod(mnt_userns, inode);
+#else
 		err = ntfs_acl_chmod(inode);
+#endif
 		if (err)
 			goto out;
 
-		/* Linux 'w' -> Windows 'ro'. */
+		/* linux 'w' -> windows 'ro' */
 		if (0222 & inode->i_mode)
 			ni->std_fa &= ~FILE_ATTRIBUTE_READONLY;
 		else
 			ni->std_fa |= FILE_ATTRIBUTE_READONLY;
 	}
 
-	if (ia_valid & (ATTR_UID | ATTR_GID | ATTR_MODE))
-		ntfs_save_wsl_perm(inode);
 	mark_inode_dirty(inode);
 out:
 	return err;
@@ -798,6 +716,8 @@ out:
 
 static ssize_t ntfs_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 {
+	ssize_t err;
+	size_t count = iov_iter_count(iter);
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file->f_mapping->host;
 	struct ntfs_inode *ni = ntfs_i(inode);
@@ -826,14 +746,12 @@ static ssize_t ntfs_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 		return -EOPNOTSUPP;
 	}
 
-	return generic_file_read_iter(iocb, iter);
+	err = count ? generic_file_read_iter(iocb, iter) : 0;
+
+	return err;
 }
 
-/*
- * ntfs_get_frame_pages
- *
- * Return: Array of locked pages.
- */
+/* returns array of locked pages */
 static int ntfs_get_frame_pages(struct address_space *mapping, pgoff_t index,
 				struct page **pages, u32 pages_per_frame,
 				bool *frame_uptodate)
@@ -866,9 +784,7 @@ static int ntfs_get_frame_pages(struct address_space *mapping, pgoff_t index,
 	return 0;
 }
 
-/*
- * ntfs_compress_write - Helper for ntfs_file_write_iter() (compressed files).
- */
+/*helper for ntfs_file_write_iter (compressed files)*/
 static ssize_t ntfs_compress_write(struct kiocb *iocb, struct iov_iter *from)
 {
 	int err;
@@ -901,7 +817,7 @@ static ssize_t ntfs_compress_write(struct kiocb *iocb, struct iov_iter *from)
 		return -EOPNOTSUPP;
 	}
 
-	pages = kmalloc_array(pages_per_frame, sizeof(struct page *), GFP_NOFS);
+	pages = ntfs_malloc(pages_per_frame * sizeof(struct page *));
 	if (!pages)
 		return -ENOMEM;
 
@@ -914,7 +830,7 @@ static ssize_t ntfs_compress_write(struct kiocb *iocb, struct iov_iter *from)
 	if (err)
 		goto out;
 
-	/* Zero range [valid : pos). */
+	/* zero range [valid : pos) */
 	while (valid < pos) {
 		CLST lcn, clen;
 
@@ -933,7 +849,7 @@ static ssize_t ntfs_compress_write(struct kiocb *iocb, struct iov_iter *from)
 			continue;
 		}
 
-		/* Load full frame. */
+		/* Load full frame */
 		err = ntfs_get_frame_pages(mapping, frame_vbo >> PAGE_SHIFT,
 					   pages, pages_per_frame,
 					   &frame_uptodate);
@@ -979,7 +895,7 @@ static ssize_t ntfs_compress_write(struct kiocb *iocb, struct iov_iter *from)
 		ni->i_valid = valid = frame_vbo + frame_size;
 	}
 
-	/* Copy user data [pos : pos + count). */
+	/* copy user data [pos : pos + count) */
 	while (count) {
 		size_t copied, bytes;
 
@@ -992,12 +908,12 @@ static ssize_t ntfs_compress_write(struct kiocb *iocb, struct iov_iter *from)
 		frame_vbo = pos & ~(frame_size - 1);
 		index = frame_vbo >> PAGE_SHIFT;
 
-		if (unlikely(fault_in_iov_iter_readable(from, bytes))) {
+		if (unlikely(iov_iter_fault_in_readable(from, bytes))) {
 			err = -EFAULT;
 			goto out;
 		}
 
-		/* Load full frame. */
+		/* Load full frame */
 		err = ntfs_get_frame_pages(mapping, index, pages,
 					   pages_per_frame, &frame_uptodate);
 		if (err)
@@ -1026,15 +942,15 @@ static ssize_t ntfs_compress_write(struct kiocb *iocb, struct iov_iter *from)
 		ip = off >> PAGE_SHIFT;
 		off = offset_in_page(pos);
 
-		/* Copy user data to pages. */
+		/* copy user data to pages */
 		for (;;) {
 			size_t cp, tail = PAGE_SIZE - off;
 
 			page = pages[ip];
-			cp = copy_page_from_iter_atomic(page, off,
-							min(tail, bytes), from);
+			cp = iov_iter_copy_from_user_atomic(page, from, off,
+							    min(tail, bytes));
 			flush_dcache_page(page);
-
+			iov_iter_advance(from, cp);
 			copied += cp;
 			bytes -= cp;
 			if (!bytes || !cp)
@@ -1077,7 +993,7 @@ static ssize_t ntfs_compress_write(struct kiocb *iocb, struct iov_iter *from)
 	}
 
 out:
-	kfree(pages);
+	ntfs_free(pages);
 
 	current->backing_dev_info = NULL;
 
@@ -1087,14 +1003,12 @@ out:
 	iocb->ki_pos += written;
 	if (iocb->ki_pos > ni->i_valid)
 		ni->i_valid = iocb->ki_pos;
-	if (iocb->ki_pos > i_size)
-		i_size_write(inode, iocb->ki_pos);
 
 	return written;
 }
 
 /*
- * ntfs_file_write_iter - file_operations::write_iter
+ * file_operations::write_iter
  */
 static ssize_t ntfs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
@@ -1120,8 +1034,10 @@ static ssize_t ntfs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	}
 
 	if (!inode_trylock(inode)) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
 		if (iocb->ki_flags & IOCB_NOWAIT)
 			return -EAGAIN;
+#endif
 		inode_lock(inode);
 	}
 
@@ -1130,7 +1046,7 @@ static ssize_t ntfs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		goto out;
 
 	if (WARN_ON(ni->ni_flags & NI_FLAG_COMPRESSED_MASK)) {
-		/* Should never be here, see ntfs_file_open(). */
+		/* should never be here, see ntfs_file_open*/
 		ret = -EOPNOTSUPP;
 		goto out;
 	}
@@ -1152,7 +1068,7 @@ out:
 }
 
 /*
- * ntfs_file_open - file_operations::open
+ * file_operations::open
  */
 int ntfs_file_open(struct inode *inode, struct file *file)
 {
@@ -1163,7 +1079,7 @@ int ntfs_file_open(struct inode *inode, struct file *file)
 		return -EOPNOTSUPP;
 	}
 
-	/* Decompress "external compressed" file if opened for rw. */
+	/* Decompress "external compressed" file if opened for rw */
 	if ((ni->ni_flags & NI_FLAG_COMPRESSED_MASK) &&
 	    (file->f_flags & (O_WRONLY | O_RDWR | O_TRUNC))) {
 #ifdef CONFIG_NTFS3_LZX_XPRESS
@@ -1183,7 +1099,7 @@ int ntfs_file_open(struct inode *inode, struct file *file)
 }
 
 /*
- * ntfs_file_release - file_operations::release
+ * file_operations::release
  */
 static int ntfs_file_release(struct inode *inode, struct file *file)
 {
@@ -1191,8 +1107,8 @@ static int ntfs_file_release(struct inode *inode, struct file *file)
 	struct ntfs_sb_info *sbi = ni->mi.sbi;
 	int err = 0;
 
-	/* If we are last writer on the inode, drop the block reservation. */
-	if (sbi->options->prealloc && ((file->f_mode & FMODE_WRITE) &&
+	/* if we are the last writer on the inode, drop the block reservation */
+	if (sbi->options.prealloc && ((file->f_mode & FMODE_WRITE) &&
 				      atomic_read(&inode->i_writecount) == 1)) {
 		ni_lock(ni);
 		down_write(&ni->file.run_lock);
@@ -1206,30 +1122,48 @@ static int ntfs_file_release(struct inode *inode, struct file *file)
 	return err;
 }
 
-// clang-format off
+/* file_operations::fiemap */
+int ntfs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
+		__u64 start, __u64 len)
+{
+	int err;
+	struct ntfs_inode *ni = ntfs_i(inode);
+
+	if (fieinfo->fi_flags & FIEMAP_FLAG_XATTR)
+		return -EOPNOTSUPP;
+
+	ni_lock(ni);
+
+	err = ni_fiemap(ni, fieinfo, start, len);
+
+	ni_unlock(ni);
+
+	return err;
+}
+
 const struct inode_operations ntfs_file_inode_operations = {
-	.getattr	= ntfs_getattr,
-	.setattr	= ntfs3_setattr,
-	.listxattr	= ntfs_listxattr,
-	.permission	= ntfs_permission,
-	.get_acl	= ntfs_get_acl,
-	.set_acl	= ntfs_set_acl,
+	.getattr = ntfs_getattr,
+	.setattr = ntfs3_setattr,
+	.listxattr = ntfs_listxattr,
+	.permission = ntfs_permission,
+	.get_acl = ntfs_get_acl,
+	.set_acl = ntfs_set_acl,
+	.fiemap = ntfs_fiemap,
 };
 
 const struct file_operations ntfs_file_operations = {
-	.llseek		= generic_file_llseek,
-	.read_iter	= ntfs_file_read_iter,
-	.write_iter	= ntfs_file_write_iter,
+	.llseek = generic_file_llseek,
+	.read_iter = ntfs_file_read_iter,
+	.write_iter = ntfs_file_write_iter,
 	.unlocked_ioctl = ntfs_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl	= ntfs_compat_ioctl,
+	.compat_ioctl = ntfs_compat_ioctl,
 #endif
-	.splice_read	= generic_file_splice_read,
-	.mmap		= ntfs_file_mmap,
-	.open		= ntfs_file_open,
-	.fsync		= generic_file_fsync,
-	.splice_write	= iter_file_splice_write,
-	.fallocate	= ntfs_fallocate,
-	.release	= ntfs_file_release,
+	.splice_read = generic_file_splice_read,
+	.mmap = ntfs_file_mmap,
+	.open = ntfs_file_open,
+	.fsync = generic_file_fsync,
+	.splice_write = iter_file_splice_write,
+	.fallocate = ntfs_fallocate,
+	.release = ntfs_file_release,
 };
-// clang-format on

@@ -4,9 +4,7 @@
 #
 
 # to check robot warnings
-ccflags-y += -Wint-to-pointer-cast \
-	$(call cc-option,-Wunused-but-set-variable,-Wunused-const-variable) \
-	$(call cc-option,-Wold-style-declaration,-Wout-of-line-declaration)
+ccflags-y += -Wunused-but-set-variable -Wint-to-pointer-cast
 
 obj-$(CONFIG_NTFS3_FS) += ntfs3.o
 
@@ -34,3 +32,12 @@ ntfs3-$(CONFIG_NTFS3_LZX_XPRESS) += $(addprefix lib/,\
 		lzx_decompress.o \
 		xpress_decompress.o \
 		)
+
+ccflags-$(CONFIG_NTFS3_LZX_XPRESS) += -DCONFIG_NTFS3_LZX_XPRESS
+ccflags-$(CONFIG_NTFS3_FS_POSIX_ACL) += -DCONFIG_NTFS3_FS_POSIX_ACL
+
+all:
+	make -C /lib/modules/$(KVERSION)/build M=$(PWD) modules
+
+clean:
+	make -C /lib/modules/$(KVERSION)/build M=$(PWD) clean
