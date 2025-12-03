@@ -3066,6 +3066,7 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 		chip->bp.fastchg_curr_ma = -EINVAL;
 	}
 
+#ifdef 0
 	/*
 	 * Update the max fcc values based on QG subtype including
 	 * error margins.
@@ -3137,6 +3138,7 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 				chip->ttf->step_chg_cfg[i].value);
 		}
 	}
+#endif
 
 	qg_dbg(chip, QG_DEBUG_PROFILE, "profile=%s FV=%duV FCC=%dma\n",
 			chip->bp.batt_type_str, chip->bp.float_volt_uv,
