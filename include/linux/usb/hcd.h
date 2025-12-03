@@ -424,6 +424,11 @@ struct hc_driver {
 	int (*get_core_id)(struct usb_hcd *hcd);
 	int (*stop_endpoint)(struct usb_hcd *hcd, struct usb_device *udev,
 			struct usb_host_endpoint *ep);
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
 };
 
 static inline int hcd_giveback_urb_in_bh(struct usb_hcd *hcd)
