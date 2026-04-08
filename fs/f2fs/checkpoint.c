@@ -1373,7 +1373,7 @@ static void commit_checkpoint(struct f2fs_sb_info *sbi,
 
 	f2fs_wait_on_page_writeback(page, META, true, true);
 
-	memcpy(page_address(page), src, PAGE_SIZE);
+	copy_page(page_address(page), src);
 
 	set_page_dirty(page);
 	if (unlikely(!clear_page_dirty_for_io(page)))
@@ -1599,6 +1599,14 @@ int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	}
 
 	trace_f2fs_write_checkpoint(sbi->sb, cpc->reason, "start block_ops");
+
+#ifdef CONFIG_F2FS_CP_OPT
+	/*
+	 * checkpoint will maintain the xattr consistency of dirs,
+	 * so we can remove them from tracking list when do_checkpoint
+	 */
+	f2fs_clear_xattr_set_ilist(sbi);
+#endif
 
 	err = block_operations(sbi);
 	if (err)

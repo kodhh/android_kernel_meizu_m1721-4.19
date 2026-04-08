@@ -274,9 +274,10 @@ static int lz4_decompress_pages(struct decompress_io_ctx *dic)
 	}
 
 	if (ret != PAGE_SIZE << dic->log_cluster_size) {
-		printk_ratelimited("%sF2FS-fs (%s): lz4 invalid ret:%d, "
+		printk_ratelimited("%sF2FS-fs (%s): lz4 invalid rlen:%zu, "
 					"expected:%lu\n", KERN_ERR,
-					F2FS_I_SB(dic->inode)->sb->s_id, ret,
+					F2FS_I_SB(dic->inode)->sb->s_id,
+					dic->rlen,
 					PAGE_SIZE << dic->log_cluster_size);
 		return -EIO;
 	}
@@ -296,22 +297,22 @@ static const struct f2fs_compress_ops f2fs_lz4_ops = {
 
 static int zstd_init_compress_ctx(struct compress_ctx *cc)
 {
-	ZSTD_parameters params;
-	ZSTD_CStream *stream;
+	zstd_parameters params;
+	zstd_cstream *stream;
 	void *workspace;
 	unsigned int workspace_size;
 
 	params = ZSTD_getParams(F2FS_ZSTD_DEFAULT_CLEVEL, cc->rlen, 0);
-	workspace_size = ZSTD_CStreamWorkspaceBound(params.cParams);
+	workspace_size = zstd_cstream_workspace_bound(&params.cParams);
 
 	workspace = f2fs_kvmalloc(F2FS_I_SB(cc->inode),
 					workspace_size, GFP_NOFS);
 	if (!workspace)
 		return -ENOMEM;
 
-	stream = ZSTD_initCStream(params, 0, workspace, workspace_size);
+	stream = zstd_init_cstream(&params, 0, workspace, workspace_size);
 	if (!stream) {
-		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_initCStream failed\n",
+		printk_ratelimited("%sF2FS-fs (%s): %s zstd_init_cstream failed\n",
 				KERN_ERR, F2FS_I_SB(cc->inode)->sb->s_id,
 				__func__);
 		kvfree(workspace);
@@ -334,9 +335,9 @@ static void zstd_destroy_compress_ctx(struct compress_ctx *cc)
 
 static int zstd_compress_pages(struct compress_ctx *cc)
 {
-	ZSTD_CStream *stream = cc->private2;
-	ZSTD_inBuffer inbuf;
-	ZSTD_outBuffer outbuf;
+	zstd_cstream *stream = cc->private2;
+	zstd_in_buffer inbuf;
+	zstd_out_buffer outbuf;
 	int src_size = cc->rlen;
 	int dst_size = src_size - PAGE_SIZE - COMPRESS_HEADER_SIZE;
 	int ret;
@@ -349,19 +350,19 @@ static int zstd_compress_pages(struct compress_ctx *cc)
 	outbuf.dst = cc->cbuf->cdata;
 	outbuf.size = dst_size;
 
-	ret = ZSTD_compressStream(stream, &outbuf, &inbuf);
-	if (ZSTD_isError(ret)) {
-		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_compressStream failed, ret: %d\n",
+	ret = zstd_compress_stream(stream, &outbuf, &inbuf);
+	if (zstd_is_error(ret)) {
+		printk_ratelimited("%sF2FS-fs (%s): %s zstd_compress_stream failed, ret: %d\n",
 				KERN_ERR, F2FS_I_SB(cc->inode)->sb->s_id,
-				__func__, ZSTD_getErrorCode(ret));
+				__func__, zstd_get_error_code(ret));
 		return -EIO;
 	}
 
-	ret = ZSTD_endStream(stream, &outbuf);
-	if (ZSTD_isError(ret)) {
-		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_endStream returned %d\n",
+	ret = zstd_end_stream(stream, &outbuf);
+	if (zstd_is_error(ret)) {
+		printk_ratelimited("%sF2FS-fs (%s): %s zstd_end_stream returned %d\n",
 				KERN_ERR, F2FS_I_SB(cc->inode)->sb->s_id,
-				__func__, ZSTD_getErrorCode(ret));
+				__func__, zstd_get_error_code(ret));
 		return -EIO;
 	}
 
@@ -378,21 +379,20 @@ static int zstd_compress_pages(struct compress_ctx *cc)
 
 static int zstd_init_decompress_ctx(struct decompress_io_ctx *dic)
 {
-	ZSTD_DStream *stream;
+	zstd_dstream *stream;
 	void *workspace;
 	unsigned int workspace_size;
 
-	workspace_size = ZSTD_DStreamWorkspaceBound(MAX_COMPRESS_WINDOW_SIZE);
+	workspace_size = zstd_dstream_workspace_bound(MAX_COMPRESS_WINDOW_SIZE);
 
 	workspace = f2fs_kvmalloc(F2FS_I_SB(dic->inode),
 					workspace_size, GFP_NOFS);
 	if (!workspace)
 		return -ENOMEM;
 
-	stream = ZSTD_initDStream(MAX_COMPRESS_WINDOW_SIZE,
-					workspace, workspace_size);
+	stream = zstd_init_dstream(MAX_COMPRESS_WINDOW_SIZE, workspace, workspace_size);
 	if (!stream) {
-		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_initDStream failed\n",
+		printk_ratelimited("%sF2FS-fs (%s): %s zstd_init_dstream failed\n",
 				KERN_ERR, F2FS_I_SB(dic->inode)->sb->s_id,
 				__func__);
 		kvfree(workspace);
@@ -414,9 +414,9 @@ static void zstd_destroy_decompress_ctx(struct decompress_io_ctx *dic)
 
 static int zstd_decompress_pages(struct decompress_io_ctx *dic)
 {
-	ZSTD_DStream *stream = dic->private2;
-	ZSTD_inBuffer inbuf;
-	ZSTD_outBuffer outbuf;
+	zstd_dstream *stream = dic->private2;
+	zstd_in_buffer inbuf;
+	zstd_out_buffer outbuf;
 	int ret;
 
 	inbuf.pos = 0;
@@ -427,11 +427,11 @@ static int zstd_decompress_pages(struct decompress_io_ctx *dic)
 	outbuf.dst = dic->rbuf;
 	outbuf.size = dic->rlen;
 
-	ret = ZSTD_decompressStream(stream, &outbuf, &inbuf);
-	if (ZSTD_isError(ret)) {
-		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_compressStream failed, ret: %d\n",
+	ret = zstd_decompress_stream(stream, &outbuf, &inbuf);
+	if (zstd_is_error(ret)) {
+		printk_ratelimited("%sF2FS-fs (%s): %s zstd_decompress_stream failed, ret: %d\n",
 				KERN_ERR, F2FS_I_SB(dic->inode)->sb->s_id,
-				__func__, ZSTD_getErrorCode(ret));
+				__func__, zstd_get_error_code(ret));
 		return -EIO;
 	}
 
@@ -784,6 +784,10 @@ static int __f2fs_cluster_blocks(struct compress_ctx *cc, bool compr)
 					ret++;
 			}
 		}
+
+		f2fs_bug_on(F2FS_I_SB(cc->inode),
+			!compr && ret != cc->cluster_size &&
+			!is_inode_flag_set(cc->inode, FI_COMPRESS_RELEASED));
 	}
 fail:
 	f2fs_put_dnode(&dn);
@@ -854,20 +858,15 @@ static int prepare_compress_overwrite(struct compress_ctx *cc,
 	struct f2fs_sb_info *sbi = F2FS_I_SB(cc->inode);
 	struct address_space *mapping = cc->inode->i_mapping;
 	struct page *page;
-	struct dnode_of_data dn;
 	sector_t last_block_in_bio;
 	unsigned fgp_flag = FGP_LOCK | FGP_WRITE | FGP_CREAT;
 	pgoff_t start_idx = start_idx_of_cluster(cc);
 	int i, ret;
-	bool prealloc;
 
 retry:
 	ret = f2fs_cluster_blocks(cc, false);
 	if (ret <= 0)
 		return ret;
-
-	/* compressed case */
-	prealloc = (ret < cc->cluster_size);
 
 	ret = f2fs_init_compress_ctx(cc);
 	if (ret)
@@ -922,25 +921,6 @@ retry:
 			f2fs_destroy_compress_ctx(cc);
 			goto retry;
 		}
-	}
-
-	if (prealloc) {
-		__do_map_lock(sbi, F2FS_GET_BLOCK_PRE_AIO, true);
-
-		set_new_dnode(&dn, cc->inode, NULL, NULL, 0);
-
-		for (i = cc->cluster_size - 1; i > 0; i--) {
-			ret = f2fs_get_block(&dn, start_idx + i);
-			if (ret) {
-				i = cc->cluster_size;
-				break;
-			}
-
-			if (dn.data_blkaddr != NEW_ADDR)
-				break;
-		}
-
-		__do_map_lock(sbi, F2FS_GET_BLOCK_PRE_AIO, false);
 	}
 
 	if (likely(!ret)) {
