@@ -7,7 +7,7 @@
 #include <linux/slab.h>
 #include <linux/rwsem.h>
 #include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+#if 0
 #include <linux/xarray.h>
 #endif
 
@@ -291,7 +291,7 @@ static struct ksmbd_session *__session_create(int protocol)
 
 	set_session_flag(sess, protocol);
 	INIT_LIST_HEAD(&sess->sessions_entry);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+#if 0
 	xa_init(&sess->tree_conns);
 #else
 	INIT_LIST_HEAD(&sess->tree_conn_list);

@@ -1686,7 +1686,7 @@ static int smb_direct_init_params(struct smb_direct_transport *t,
 		return -EINVAL;
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+#if 0
 	if (device->attrs.max_send_sge < SMB_DIRECT_MAX_SEND_SGES) {
 		ksmbd_err("warning: device max_send_sge = %d too small\n",
 			device->attrs.max_send_sge);
