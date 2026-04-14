@@ -560,9 +560,7 @@ static int ntfs_show_options(struct seq_file *m, struct dentry *root)
 	struct super_block *sb = root->d_sb;
 	struct ntfs_sb_info *sbi = sb->s_fs_info;
 	struct ntfs_mount_options *opts = &sbi->options;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
 	struct user_namespace *user_ns = seq_user_ns(m);
-#endif
 
 	if (opts->uid)
 		seq_printf(m, ",uid=%u",
@@ -1481,14 +1479,6 @@ static struct dentry *ntfs_mount(struct file_system_type *fs_type, int flags,
 
 static struct file_system_type ntfs_fs_type = {
 	.owner = THIS_MODULE,
-	.name = "ntfs",
-	.mount = ntfs_mount,
-	.kill_sb = kill_block_super,
-	.fs_flags = FS_REQUIRES_DEV,
-};
-
-static struct file_system_type ntfs_fs_type3 = {
-	.owner = THIS_MODULE,
 	.name = "ntfs3",
 	.mount = ntfs_mount,
 	.kill_sb = kill_block_super,
@@ -1529,7 +1519,6 @@ static int __init init_ntfs_fs(void)
 	}
 
 	err = register_filesystem(&ntfs_fs_type);
-	err = register_filesystem(&ntfs_fs_type3);
 	if (err)
 		goto out;
 
@@ -1549,7 +1538,6 @@ static void __exit exit_ntfs_fs(void)
 	}
 
 	unregister_filesystem(&ntfs_fs_type);
-	unregister_filesystem(&ntfs_fs_type3);
 	ntfs3_exit_bitmap();
 }
 

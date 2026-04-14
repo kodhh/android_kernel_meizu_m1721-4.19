@@ -4,7 +4,6 @@
 #
 
 # to check robot warnings
-ccflags-y += -Wunused-but-set-variable -Wint-to-pointer-cast
 
 obj-$(CONFIG_NTFS3_FS) += ntfs3.o
 
