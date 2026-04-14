@@ -18,11 +18,25 @@ jobs:
         submodules: recursive
         token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install Clang and Dependencies
+    - name: Install LLVM 18 and Dependencies
       run: |
-        # 在Ubuntu上安装Clang及编译依赖（示例命令，具体包名请根据你的WSL2内核需求调整）
+        # 添加 LLVM 官方源
+        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main"
+        
+        # 更新并安装 LLVM 18 及依赖
         sudo apt-get update
-        sudo apt-get install -y git clang gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi lld llvm
+        sudo apt-get install -y \
+          clang-18 \
+          lld-18 \
+          llvm-18 \
+          gcc-aarch64-linux-gnu \
+          gcc-arm-linux-gnueabi \
+          build-essential \
+          flex \
+          bison \
+          libssl-dev \
+          bc
 
     - name: Configure Kernel (示例)
       run: |
