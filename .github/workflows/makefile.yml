@@ -56,11 +56,9 @@ jobs:
         sudo ln -sf /usr/bin/llvm-readelf-18 /usr/bin/llvm-readelf
         sudo ln -sf /usr/bin/llvm-strip-18 /usr/bin/llvm-strip
     
-        # 验证所有工具
-        which llvm-nm
-        which llvm-ar
-        which clang
-        which ld.lld
+        # Force the BFD linker to use the LLVM 18 plugin
+        sudo mkdir -p /usr/lib/bfd-plugins
+        sudo ln -sf /usr/lib/llvm-18/lib/LLVMgold.so /usr/lib/bfd-plugins/LLVMgold.so
 
     - name: Configure Kernel (示例)
       run: |
