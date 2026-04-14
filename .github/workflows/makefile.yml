@@ -44,14 +44,23 @@ jobs:
         sudo update-alternatives --install /usr/bin/lld lld /usr/bin/lld-18 100
         sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-18 100
         
-        # 创建符号链接确保 ld.lld 在 PATH 中
+        # 创建所有必要的符号链接
+        sudo ln -sf /usr/bin/clang-18 /usr/bin/clang
+        sudo ln -sf /usr/bin/clang++-18 /usr/bin/clang++
+        sudo ln -sf /usr/bin/lld-18 /usr/bin/lld
         sudo ln -sf /usr/bin/ld.lld-18 /usr/bin/ld.lld
-        sudo ln -sf /usr/bin/lld-18 /usr/local/bin/lld
-        
-        # 验证安装
+        sudo ln -sf /usr/bin/llvm-nm-18 /usr/bin/llvm-nm
+        sudo ln -sf /usr/bin/llvm-ar-18 /usr/bin/llvm-ar
+        sudo ln -sf /usr/bin/llvm-objcopy-18 /usr/bin/llvm-objcopy
+        sudo ln -sf /usr/bin/llvm-objdump-18 /usr/bin/llvm-objdump
+        sudo ln -sf /usr/bin/llvm-readelf-18 /usr/bin/llvm-readelf
+        sudo ln -sf /usr/bin/llvm-strip-18 /usr/bin/llvm-strip
+    
+        # 验证所有工具
+        which llvm-nm
+        which llvm-ar
+        which clang
         which ld.lld
-        ld.lld --version
-        clang --version
 
     - name: Configure Kernel (示例)
       run: |
