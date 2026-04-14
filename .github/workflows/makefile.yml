@@ -38,6 +38,21 @@ jobs:
           libssl-dev \
           bc
 
+        # 设置默认版本
+        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100
+        sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100
+        sudo update-alternatives --install /usr/bin/lld lld /usr/bin/lld-18 100
+        sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-18 100
+        
+        # 创建符号链接确保 ld.lld 在 PATH 中
+        sudo ln -sf /usr/bin/ld.lld-18 /usr/bin/ld.lld
+        sudo ln -sf /usr/bin/lld-18 /usr/local/bin/lld
+        
+        # 验证安装
+        which ld.lld
+        ld.lld --version
+        clang --version
+
     - name: Configure Kernel (示例)
       run: |
         # 此处为示例配置命令，请替换为你的WSL2内核实际配置命令
