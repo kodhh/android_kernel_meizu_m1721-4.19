@@ -10,6 +10,10 @@
 #include <linux/rq_stats.h>
 #include <linux/tick.h>
 
+spinlock_t rq_lock;
+struct rq_data rq_info;
+struct workqueue_struct *rq_wq;
+
 #define MAX_LONG_SIZE 24
 #define DEFAULT_DEF_TIMER_JIFFIES 5
 

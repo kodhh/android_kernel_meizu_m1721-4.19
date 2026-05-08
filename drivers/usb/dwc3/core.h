@@ -1660,7 +1660,7 @@ static inline void dwc3_otg_host_init(struct dwc3 *dwc)
 #endif
 
 /* power management interface */
-#if !IS_ENABLED(CONFIG_USB_DWC3_HOST)
+#if IS_ENABLED(CONFIG_USB_DWC3_GADGET) || IS_ENABLED(CONFIG_USB_DWC3_DUAL_ROLE)
 int dwc3_gadget_suspend(struct dwc3 *dwc);
 int dwc3_gadget_resume(struct dwc3 *dwc);
 void dwc3_gadget_process_pending_events(struct dwc3 *dwc);

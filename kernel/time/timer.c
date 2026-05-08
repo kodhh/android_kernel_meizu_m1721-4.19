@@ -1353,7 +1353,7 @@ static void call_timer_fn(struct timer_list *timer, void (*fn)(struct timer_list
 	 */
 	lock_map_acquire(&lockdep_map);
 
-	trace_timer_expire_entry(timer);
+	trace_timer_expire_entry(timer, 0);
 	fn(timer);
 	trace_timer_expire_exit(timer);
 

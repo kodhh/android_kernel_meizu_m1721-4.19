@@ -51,6 +51,19 @@
 #include "ufs-debugfs.h"
 #include "ufs-qcom.h"
 
+struct utp_upiu_task_req {
+	struct utp_upiu_header header;
+	__be32 input_param1;
+	__be32 input_param2;
+	__be32 input_param3;
+};
+
+struct utp_upiu_task_rsp {
+	struct utp_upiu_header header;
+	__be32 output_param1;
+	__be32 output_param2;
+};
+
 static bool ufshcd_wb_sup(struct ufs_hba *hba);
 static int ufshcd_wb_ctrl(struct ufs_hba *hba, bool enable);
 static int ufshcd_wb_buf_flush_enable(struct ufs_hba *hba);
@@ -648,7 +661,7 @@ static void ufshcd_add_tm_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 	int off = (int)tag - hba->nutrs;
 
 	descp = &hba->utmrdl_base_addr[off];
-	task_req = (struct utp_upiu_task_req *)descp->task_req_upiu;
+	task_req = (struct utp_upiu_task_req *)&descp->req_header;
 	trace_ufshcd_upiu(dev_name(hba->dev), str, &task_req->header,
 			&task_req->input_param1);
 }
@@ -980,11 +993,11 @@ static void ufshcd_print_tmrs(struct ufs_hba *hba, unsigned long bitmap)
 				sizeof(struct request_desc_header));
 		dev_err(hba->dev, "TM[%d] - Task Management Request UPIU\n",
 				tag);
-		ufshcd_hex_dump(hba, "TM REQ", tmrdp->task_req_upiu,
+		ufshcd_hex_dump(hba, "TM REQ", &tmrdp->req_header,
 				sizeof(struct utp_upiu_req));
 		dev_err(hba->dev, "TM[%d] - Task Management Response UPIU\n",
 				tag);
-		ufshcd_hex_dump(hba, "TM RSP", tmrdp->task_rsp_upiu,
+		ufshcd_hex_dump(hba, "TM RSP", &tmrdp->rsp_header,
 				sizeof(struct utp_task_req_desc));
 	}
 }
@@ -6274,8 +6287,8 @@ static int ufshcd_task_req_compl(struct ufs_hba *hba, u32 index, u8 *resp)
 	ocs_value = ufshcd_get_tmr_ocs(&task_req_descp[index]);
 
 	if (ocs_value == OCS_SUCCESS) {
-		task_rsp_upiup = (struct utp_upiu_task_rsp *)
-				task_req_descp[index].task_rsp_upiu;
+	task_rsp_upiup = (struct utp_upiu_task_rsp *)
+			&task_req_descp[index].rsp_header;
 		task_result = be32_to_cpu(task_rsp_upiup->output_param1);
 		task_result = task_result & MASK_TM_SERVICE_RESP;
 		if (resp)
@@ -7817,7 +7830,7 @@ static int ufshcd_issue_tm_cmd(struct ufs_hba *hba, int lun_id, int task_id,
 
 	/* Configure task request UPIU */
 	task_req_upiup =
-		(struct utp_upiu_task_req *) task_req_descp->task_req_upiu;
+		(struct utp_upiu_task_req *) &task_req_descp->req_header;
 	task_tag = hba->nutrs + free_slot;
 	task_req_upiup->header.dword_0 =
 		UPIU_HEADER_DWORD(UPIU_TRANSACTION_TASK_REQ, 0,
