@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 #ifndef __MEDIA_INFO_H__
 #define __MEDIA_INFO_H__
 
@@ -387,8 +388,8 @@ enum color_fmts {
 	 * . . . . . . . . . . . . . . . .    -------> Buffer size aligned to 4k
 	 * . . . . . . . . . . . . . . . .              V
 	 *
-	 * RGB_Stride = align(Width * 4, 128)
-	 * RGB_Scanlines = align(Height, 32)
+	 * RGB_Stride = align(Width * 4, 256)
+	 * RGB_Scanlines = align(Height, 16)
 	 * RGB_Plane_size = align(RGB_Stride * RGB_Scanlines, 4096)
 	 * RGB_Meta_Stride = align(roundup(Width, RGB_TileWidth), 64)
 	 * RGB_Meta_Scanline = align(roundup(Height, RGB_TileHeight), 16)
@@ -481,7 +482,7 @@ enum color_fmts {
 	 * . . . . . . . . . . . . . . . .    -------> Buffer size aligned to 4k
 	 * . . . . . . . . . . . . . . . .              V
 	 *
-	 * RGB_Stride = align(Width * 2, 128)
+	 * RGB_Stride = align(Width * 2, 256)
 	 * RGB_Scanlines = align(Height, 16)
 	 * RGB_Plane_size = align(RGB_Stride * RGB_Scanlines, 4096)
 	 * RGB_Meta_Stride = align(roundup(Width, RGB_TileWidth), 64)
@@ -661,6 +662,7 @@ enum color_fmts {
 #define COLOR_FMT_RGB565_UBWC		COLOR_FMT_RGB565_UBWC
 #define COLOR_FMT_P010_UBWC		COLOR_FMT_P010_UBWC
 #define COLOR_FMT_P010		COLOR_FMT_P010
+#define COLOR_FMT_NV12_128		COLOR_FMT_NV12
 #define COLOR_FMT_NV12_512		COLOR_FMT_NV12_512
 
 static inline unsigned int VENUS_EXTRADATA_SIZE(int width, int height)
