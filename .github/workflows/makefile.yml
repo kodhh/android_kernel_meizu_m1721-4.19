@@ -10,6 +10,10 @@ jobs:
   build:
     # 根据项目需求选择 windows-latest 或 ubuntu-latest
     runs-on: ubuntu-latest  # 若在Windows上编译，通常需改为 windows-latest
+    env:
+      GCC_PATH: /home/runner/prebuilt/gcc
+      GCC32_PATH: /home/runner/prebuilt/gcc32
+      CLANG_PATH: /home/runner/prebuilt/clang
 
     steps:
     - name: Checkout code
@@ -18,59 +22,37 @@ jobs:
         submodules: recursive
         token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install LLVM 18 and Dependencies
+    - name: Clone GCC Toolchains
       run: |
-        # 添加 LLVM 官方源
-        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main"
+        # 使用 home 目录避免权限问题
+        mkdir -p $GCC_PATH $GCC32_PATH $CLANG_PATH
         
-        # 更新并安装 LLVM 18 及依赖
-        sudo apt-get update
-        sudo apt-get install -y \
-          clang-18 \
-          lld-18 \
-          llvm-18 \
-          gcc-aarch64-linux-gnu \
-          gcc-arm-linux-gnueabi \
-          build-essential \
-          flex \
-          bison \
-          libssl-dev \
-          bc
+        # 克隆时使用 --depth 1 和 --single-branch 加快速度
+        git clone --depth=1 --single-branch -b lineage-19.1 \
+          https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git \
+          $GCC_PATH || { echo "GCC clone failed"; exit 1; }
+        
+        git clone --depth=1 --single-branch -b lineage-19.1 \
+          https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git \
+          $GCC32_PATH || { echo "GCC32 clone failed"; exit 1; }
 
-        # 设置默认版本
-        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100
-        sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100
-        sudo update-alternatives --install /usr/bin/lld lld /usr/bin/lld-18 100
-        sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-18 100
-        
-        # 创建所有必要的符号链接
-        sudo ln -sf /usr/bin/clang-18 /usr/bin/clang
-        sudo ln -sf /usr/bin/clang++-18 /usr/bin/clang++
-        sudo ln -sf /usr/bin/lld-18 /usr/bin/lld
-        sudo ln -sf /usr/bin/ld.lld-18 /usr/bin/ld.lld
-        sudo ln -sf /usr/bin/llvm-nm-18 /usr/bin/llvm-nm
-        sudo ln -sf /usr/bin/llvm-ar-18 /usr/bin/llvm-ar
-        sudo ln -sf /usr/bin/llvm-objcopy-18 /usr/bin/llvm-objcopy
-        sudo ln -sf /usr/bin/llvm-objdump-18 /usr/bin/llvm-objdump
-        sudo ln -sf /usr/bin/llvm-readelf-18 /usr/bin/llvm-readelf
-        sudo ln -sf /usr/bin/llvm-strip-18 /usr/bin/llvm-strip
-    
-        # Force the BFD linker to use the LLVM 18 plugin
-        sudo mkdir -p /usr/lib/bfd-plugins
-        sudo ln -sf /usr/lib/llvm-18/lib/LLVMgold.so /usr/lib/bfd-plugins/LLVMgold.so
+        git clone --depth=1 --single-branch -b lineage-20.0 \
+          https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b.git \
+          $CLANG_PATH || { echo "CLANG clone failed"; exit 1; }
 
     - name: Configure Kernel (示例)
       run: |
         # 此处为示例配置命令，请替换为你的WSL2内核实际配置命令
         # 例如：make ARCH=arm64 CC=clang defconfig
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CC=clang LD=ld.lld vendor/YUREKA2_lto_defconfig O=out
+        export PATH="$CLANG_PATH/bin:"$GCC_PATH/bin:$GCC32_PATH/bin:$PATH"
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_COMPAT=arm-linux-androideabi- CC=clang LD=ld.lld vendor/YUREKA2_lto_defconfig O=out
 
     - name: Build Kernel with Clang
       run: |
         # 此处为示例编译命令，请替换为你的WSL2内核实际编译命令
         # 例如：make ARCH=arm64 CC=clang -j$(nproc)
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CC=clang LD=ld.lld KSU_VERSION=$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 13000) O=out -j$(nproc)
+        export PATH="$CLANG_PATH/bin:"$GCC_PATH/bin:$GCC32_PATH/bin:$PATH"
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_COMPAT=arm-linux-androideabi- CC=clang LD=ld.lld KSU_VERSION=$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 13000) O=out -j$(nproc)
 
     # 可选：上传构建产物
     - name: Upload Build Artifacts
