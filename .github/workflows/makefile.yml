@@ -45,14 +45,14 @@ jobs:
         # 此处为示例配置命令，请替换为你的WSL2内核实际配置命令
         # 例如：make ARCH=arm64 CC=clang defconfig
         export PATH="$CLANG_PATH/clang-r475365b/bin:$GCC_PATH/bin:$GCC32_PATH/bin:$PATH"
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_COMPAT=arm-linux-androideabi- CC=clang LD=ld.lld vendor/YUREKA2_lto_defconfig O=out
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_COMPAT=arm-linux-androideabi- LD_COMPAT=arm-linux-androideabi-ld CC=clang LD=ld.lld vendor/YUREKA2_lto_defconfig O=out
 
     - name: Build Kernel with Clang
       run: |
         # 此处为示例编译命令，请替换为你的WSL2内核实际编译命令
         # 例如：make ARCH=arm64 CC=clang -j$(nproc)
         export PATH="$CLANG_PATH/clang-r475365b/bin:$GCC_PATH/bin:$GCC32_PATH/bin:$PATH"
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_COMPAT=arm-linux-androideabi- CC=clang LD=ld.lld KSU_VERSION=$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 13000) O=out -j$(nproc)
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_COMPAT=arm-linux-androideabi- LD_COMPAT=arm-linux-androideabi-ld CC=clang LD=ld.lld KSU_VERSION=$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 13000) O=out -j$(nproc)
 
     # 可选：上传构建产物
     - name: Upload Build Artifacts
