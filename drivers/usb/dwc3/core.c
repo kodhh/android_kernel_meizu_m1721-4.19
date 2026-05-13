@@ -2014,10 +2014,6 @@ static struct platform_driver dwc3_driver = {
 	},
 };
 
-void dwc3_gadget_process_pending_events(struct dwc3 *dwc)
-{
-}
-
 module_platform_driver(dwc3_driver);
 
 MODULE_ALIAS("platform:dwc3");
