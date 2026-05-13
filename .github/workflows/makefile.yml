@@ -11,8 +11,6 @@ jobs:
     # 根据项目需求选择 windows-latest 或 ubuntu-latest
     runs-on: ubuntu-latest  # 若在Windows上编译，通常需改为 windows-latest
     env:
-      GCC_PATH: /home/runner/prebuilt/gcc
-      GCC32_PATH: /home/runner/prebuilt/gcc32
       CLANG_PATH: /home/runner/prebuilt/clang
 
     steps:
@@ -24,17 +22,11 @@ jobs:
 
     - name: Clone GCC Toolchains
       run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+
         # 使用 home 目录避免权限问题
-        mkdir -p $GCC_PATH $GCC32_PATH $CLANG_PATH
-        
-        # 克隆时使用 --depth 1 和 --single-branch 加快速度
-        git clone --depth=1 --single-branch -b lineage-19.1 \
-          https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git \
-          $GCC_PATH || { echo "GCC clone failed"; exit 1; }
-        
-        git clone --depth=1 --single-branch -b lineage-19.1 \
-          https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git \
-          $GCC32_PATH || { echo "GCC32 clone failed"; exit 1; }
+        mkdir -p $CLANG_PATH
 
         git clone --depth=1 --single-branch -b android14-release \
           https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
@@ -44,15 +36,15 @@ jobs:
       run: |
         # 此处为示例配置命令，请替换为你的WSL2内核实际配置命令
         # 例如：make ARCH=arm64 CC=clang defconfig
-        export PATH="$CLANG_PATH/clang-r475365b/bin:$GCC_PATH/bin:$GCC32_PATH/bin:$PATH"
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_COMPAT=arm-linux-androideabi- LD_COMPAT=arm-linux-androideabi-ld CC=clang LD=ld.lld vendor/YUREKA2_lto_defconfig O=out
+        export PATH="$CLANG_PATH/clang-r475365b/bin:$PATH"
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CC=clang LD=ld.lld vendor/YUREKA2_lto_defconfig O=out
 
     - name: Build Kernel with Clang
       run: |
         # 此处为示例编译命令，请替换为你的WSL2内核实际编译命令
         # 例如：make ARCH=arm64 CC=clang -j$(nproc)
-        export PATH="$CLANG_PATH/clang-r475365b/bin:$GCC_PATH/bin:$GCC32_PATH/bin:$PATH"
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_COMPAT=arm-linux-androideabi- LD_COMPAT=arm-linux-androideabi-ld CC=clang LD=ld.lld KSU_VERSION=$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 13000) O=out -j$(nproc)
+        export PATH="$CLANG_PATH/clang-r475365b/bin:$PATH"
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CC=clang LD=ld.lld KSU_VERSION=$(cd KernelSU && expr $(/usr/bin/git rev-list --count HEAD) + 13000) O=out -j$(nproc)
 
     # 可选：上传构建产物
     - name: Upload Build Artifacts
