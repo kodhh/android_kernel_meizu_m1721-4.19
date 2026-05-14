@@ -41,6 +41,11 @@ int ntfs_utf16_to_nls(struct ntfs_sb_info *sbi, const struct le_str *uni,
 		return ret;
 	}
 
+	if (uni->len > 0x7fffffff) {
+		warn = 1;
+		return -EINVAL;
+	}
+
 	ip = uni->name;
 	op = buf;
 	uni_len = uni->len;
