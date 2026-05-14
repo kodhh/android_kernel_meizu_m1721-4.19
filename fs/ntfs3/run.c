@@ -492,6 +492,8 @@ requires_new_range:
 		return false;
 
 	return true;
+out:
+	return false;
 }
 
 /*helper for attr_collapse_range, which is helper for fallocate(collapse_range)*/
