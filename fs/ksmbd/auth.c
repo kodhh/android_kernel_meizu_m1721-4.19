@@ -543,6 +543,12 @@ int ksmbd_decode_ntlmssp_auth_blob(struct authenticate_message *authblob,
 	nt_off = le32_to_cpu(authblob->NtChallengeResponse.BufferOffset);
 	nt_len = le16_to_cpu(authblob->NtChallengeResponse.Length);
 
+	if (lm_off > blob_len || nt_off > blob_len ||
+	    nt_off + nt_len > blob_len) {
+		ksmbd_debug(AUTH, "invalid auth blob field offsets\n");
+		return -EINVAL;
+	}
+
 	/* process NTLM authentication */
 	if (nt_len == CIFS_AUTH_RESP_SIZE) {
 		if (le32_to_cpu(authblob->NegotiateFlags) &

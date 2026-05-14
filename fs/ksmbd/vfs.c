@@ -299,14 +299,24 @@ static int ksmbd_vfs_stream_read(struct ksmbd_file *fp, char *buf, loff_t *pos,
 				       fp->stream.name,
 				       fp->stream.size,
 				       &stream_buf);
-	if (v_len == -ENOENT) {
+	if (v_len < 0) {
 		ksmbd_err("not found stream in xattr : %zd\n", v_len);
-		err = -ENOENT;
+		err = v_len;
 		return err;
 	}
 
-	memcpy(buf, &stream_buf[*pos], count);
-	return v_len > count ? count : v_len;
+	if (*pos >= v_len) {
+		ksmbd_err("stream read position %lld out of bounds (len: %zd)\n",
+			  *pos, v_len);
+		err = -EINVAL;
+		goto out;
+	}
+
+	memcpy(buf, &stream_buf[*pos], min_t(size_t, count, v_len - *pos));
+	err = min_t(size_t, v_len - *pos, count);
+out:
+	ksmbd_free(stream_buf);
+	return err;
 }
 
 /**
@@ -432,19 +442,27 @@ static int ksmbd_vfs_stream_write(struct ksmbd_file *fp, char *buf, loff_t *pos,
 	ksmbd_debug(VFS, "write stream data pos : %llu, count : %zd\n",
 			*pos, count);
 
+	if (*pos < 0)
+		return -EINVAL;
+
+	if (*pos + count < *pos) {
+		ksmbd_err("overflow in stream write size\n");
+		return -EINVAL;
+	}
+
 	size = *pos + count;
 	if (size > XATTR_SIZE_MAX) {
 		size = XATTR_SIZE_MAX;
-		count = (*pos + count) - XATTR_SIZE_MAX;
+		count = XATTR_SIZE_MAX - *pos;
 	}
 
 	v_len = ksmbd_vfs_getcasexattr(fp->filp->f_path.dentry,
 				       fp->stream.name,
 				       fp->stream.size,
 				       &stream_buf);
-	if (v_len == -ENOENT) {
+	if (v_len < 0) {
 		ksmbd_err("not found stream in xattr : %zd\n", v_len);
-		err = -ENOENT;
+		err = v_len;
 		goto out;
 	}
 

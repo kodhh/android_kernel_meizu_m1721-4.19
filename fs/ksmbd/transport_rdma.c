@@ -697,7 +697,20 @@ again:
 				goto read_rfc1002_done;
 			}
 
+			if (data_offset + offset > st->max_recv_size) {
+				ksmbd_err("invalid data_offset %u\n",
+					  data_offset);
+				return -EINVAL;
+			}
+
 			to_copy = min_t(int, data_length - offset, to_read);
+			if (data_offset + offset + to_copy > st->max_recv_size) {
+				ksmbd_err("data_offset+offset+to_copy %u exceeds max_recv_size %d\n",
+					  data_offset + offset + to_copy,
+					  st->max_recv_size);
+				return -EINVAL;
+			}
+
 			memcpy(buf + data_read, (char *)data_transfer + data_offset + offset,
 				to_copy);
 
