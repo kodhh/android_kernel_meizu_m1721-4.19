@@ -44,21 +44,17 @@ struct workspace {
 static void zstd_set_level(struct list_head *ws, unsigned int type)
 {
     struct workspace *workspace = list_entry(ws, struct workspace, list);
-    unsigned int level = (type & 0xF0) >> 4;  // 从高4位提取级别
-    
-    /* ZSTD支持级别1-22，0表示使用默认 */
+    unsigned int level = (type & 0xFF0) >> 4;
+
     if (level == 0) {
         workspace->level = ZSTD_BTRFS_DEFAULT_LEVEL;
     } else if (level >= 1 && level <= 22) {
         workspace->level = level;
     } else {
-        /* 超出范围，使用默认并警告 */
         pr_warn("BTRFS: zstd compression level %u out of range (1-22), using default %u\n",
                 level, ZSTD_BTRFS_DEFAULT_LEVEL);
         workspace->level = ZSTD_BTRFS_DEFAULT_LEVEL;
     }
-    
-    pr_debug("BTRFS: zstd set compression level to %u\n", workspace->level);
 }
 
 static void zstd_free_workspace(struct list_head *ws)
@@ -171,10 +167,9 @@ static int zstd_compress_pages(struct list_head *ws,
     unsigned long len = *total_out;
     const unsigned long nr_dest_pages = *out_pages;
     unsigned long max_out = nr_dest_pages * PAGE_SIZE;
-    size_t reset_ret;
+    bool out_page_mapped = false;
     zstd_parameters params;
-    
-    /* 获取基于当前压缩级别的参数 */
+
     params = zstd_get_params(workspace->level, len);
     if (params.cParams.windowLog > ZSTD_BTRFS_MAX_WINDOWLOG)
         params.cParams.windowLog = ZSTD_BTRFS_MAX_WINDOWLOG;
@@ -184,38 +179,30 @@ static int zstd_compress_pages(struct list_head *ws,
     *total_out = 0;
     *total_in = 0;
 
-    /* 确保cstream有效 */
+    /* Re-init cstream with level-specific compression parameters */
+    workspace->cstream = zstd_init_cstream(&params, len,
+                                            workspace->mem,
+                                            workspace->cstream_size);
     if (!workspace->cstream) {
-        pr_err("BTRFS: cstream is NULL in compress_pages\n");
+        pr_err("BTRFS: failed to init cstream for level %u\n", workspace->level);
         return -EIO;
     }
 
-    /* 重置压缩流，使用新的参数 */
-    reset_ret = zstd_reset_cstream(workspace->cstream, len);
-    if (zstd_is_error(reset_ret)) {
-        pr_err("BTRFS: zstd_reset_cstream failed: %s\n", 
-                zstd_get_error_name(reset_ret));
-        return -EIO;
-    }
-
-    /* map in the first page of input data */
     in_page = find_get_page(mapping, start >> PAGE_SHIFT);
     if (!in_page) {
-        pr_err("BTRFS: failed to find input page\n");
         ret = -EIO;
         goto out;
     }
     workspace->in_buf.src = kmap(in_page);
     if (!workspace->in_buf.src) {
-        pr_err("BTRFS: failed to kmap input page\n");
         put_page(in_page);
+        in_page = NULL;
         ret = -ENOMEM;
         goto out;
     }
     workspace->in_buf.pos = 0;
     workspace->in_buf.size = min_t(size_t, len, PAGE_SIZE);
 
-    /* Allocate and map in the output buffer */
     out_page = alloc_page(GFP_NOFS | __GFP_HIGHMEM);
     if (!out_page) {
         ret = -ENOMEM;
@@ -227,6 +214,7 @@ static int zstd_compress_pages(struct list_head *ws,
         ret = -ENOMEM;
         goto out;
     }
+    out_page_mapped = true;
     workspace->out_buf.pos = 0;
     workspace->out_buf.size = min_t(size_t, max_out, PAGE_SIZE);
 
@@ -236,13 +224,10 @@ static int zstd_compress_pages(struct list_head *ws,
         stream_ret = zstd_compress_stream(workspace->cstream, &workspace->out_buf,
                                           &workspace->in_buf);
         if (zstd_is_error(stream_ret)) {
-            pr_debug("BTRFS: zstd_compress_stream returned %d\n",
-                     zstd_get_error_code(stream_ret));
             ret = -EIO;
             goto out;
         }
 
-        /* Check to see if we are making it bigger */
         if (tot_in + workspace->in_buf.pos > 8192 &&
             tot_in + workspace->in_buf.pos <
             tot_out + workspace->out_buf.pos) {
@@ -250,25 +235,24 @@ static int zstd_compress_pages(struct list_head *ws,
             goto out;
         }
 
-        /* We've reached the end of our output range */
         if (workspace->out_buf.pos >= max_out) {
             tot_out += workspace->out_buf.pos;
             ret = -E2BIG;
             goto out;
         }
 
-        /* Check if we need more output space */
         if (workspace->out_buf.pos == workspace->out_buf.size) {
             tot_out += PAGE_SIZE;
             max_out -= PAGE_SIZE;
             kunmap(out_page);
-            
+            out_page_mapped = false;
+
             if (nr_pages >= nr_dest_pages) {
                 out_page = NULL;
                 ret = -E2BIG;
                 goto out;
             }
-            
+
             out_page = alloc_page(GFP_NOFS | __GFP_HIGHMEM);
             if (!out_page) {
                 ret = -ENOMEM;
@@ -280,17 +264,16 @@ static int zstd_compress_pages(struct list_head *ws,
                 ret = -ENOMEM;
                 goto out;
             }
+            out_page_mapped = true;
             workspace->out_buf.pos = 0;
             workspace->out_buf.size = min_t(size_t, max_out, PAGE_SIZE);
         }
 
-        /* We've reached the end of the input */
         if (workspace->in_buf.pos >= len) {
             tot_in += workspace->in_buf.pos;
             break;
         }
 
-        /* Check if we need more input */
         if (workspace->in_buf.pos == workspace->in_buf.size) {
             tot_in += PAGE_SIZE;
             kunmap(in_page);
@@ -298,16 +281,16 @@ static int zstd_compress_pages(struct list_head *ws,
 
             start += PAGE_SIZE;
             len -= PAGE_SIZE;
-            
+
             in_page = find_get_page(mapping, start >> PAGE_SHIFT);
             if (!in_page) {
-                pr_err("BTRFS: failed to find next input page\n");
                 ret = -EIO;
                 goto out;
             }
             workspace->in_buf.src = kmap(in_page);
             if (!workspace->in_buf.src) {
                 put_page(in_page);
+                in_page = NULL;
                 ret = -ENOMEM;
                 goto out;
             }
@@ -315,24 +298,21 @@ static int zstd_compress_pages(struct list_head *ws,
             workspace->in_buf.size = min_t(size_t, len, PAGE_SIZE);
         }
     }
-    
-    /* Flush remaining data */
+
     while (1) {
         size_t stream_ret;
 
         stream_ret = zstd_end_stream(workspace->cstream, &workspace->out_buf);
         if (zstd_is_error(stream_ret)) {
-            pr_debug("BTRFS: zstd_end_stream returned %d\n",
-                     zstd_get_error_code(stream_ret));
             ret = -EIO;
             goto out;
         }
-        
+
         if (stream_ret == 0) {
             tot_out += workspace->out_buf.pos;
             break;
         }
-        
+
         if (workspace->out_buf.pos >= max_out) {
             tot_out += workspace->out_buf.pos;
             ret = -E2BIG;
@@ -342,13 +322,14 @@ static int zstd_compress_pages(struct list_head *ws,
         tot_out += PAGE_SIZE;
         max_out -= PAGE_SIZE;
         kunmap(out_page);
-        
+        out_page_mapped = false;
+
         if (nr_pages >= nr_dest_pages) {
             out_page = NULL;
             ret = -E2BIG;
             goto out;
         }
-        
+
         out_page = alloc_page(GFP_NOFS | __GFP_HIGHMEM);
         if (!out_page) {
             ret = -ENOMEM;
@@ -360,6 +341,7 @@ static int zstd_compress_pages(struct list_head *ws,
             ret = -ENOMEM;
             goto out;
         }
+        out_page_mapped = true;
         workspace->out_buf.pos = 0;
         workspace->out_buf.size = min_t(size_t, max_out, PAGE_SIZE);
     }
@@ -374,16 +356,15 @@ static int zstd_compress_pages(struct list_head *ws,
     *total_out = tot_out;
 out:
     *out_pages = nr_pages;
-    
-    /* Cleanup */
+
     if (in_page) {
-        kunmap(in_page);
+        if (workspace->in_buf.src)
+            kunmap(in_page);
         put_page(in_page);
     }
-    if (out_page && out_page->mapping) {
+    if (out_page && out_page_mapped)
         kunmap(out_page);
-    }
-    
+
     return ret;
 }
 
