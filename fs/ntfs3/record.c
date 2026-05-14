@@ -194,7 +194,8 @@ struct ATTRIB *mi_enum_attr(struct mft_inode *mi, struct ATTRIB *attr)
 {
 	const struct MFT_REC *rec = mi->mrec;
 	u32 used = le32_to_cpu(rec->used);
-	u32 t32, off, asize;
+	u32 off, asize;
+	u32 t32;
 	u16 t16;
 
 	if (!attr) {
@@ -222,10 +223,8 @@ struct ATTRIB *mi_enum_attr(struct mft_inode *mi, struct ATTRIB *attr)
 			return NULL;
 
 		asize = le32_to_cpu(attr->size);
-		if (asize < SIZEOF_RESIDENT) {
-			/* Impossible 'cause we should not return such attribute */
+		if (asize < SIZEOF_RESIDENT)
 			return NULL;
-		}
 
 		attr = Add2Ptr(attr, asize);
 		off += asize;
@@ -234,17 +233,13 @@ struct ATTRIB *mi_enum_attr(struct mft_inode *mi, struct ATTRIB *attr)
 	asize = le32_to_cpu(attr->size);
 
 	/* Can we use the first field (attr->type) */
-	if (off + 8 > used) {
-		static_assert(QuadAlign(sizeof(enum ATTR_TYPE)) == 8);
+	if (off + 8 > used)
 		return NULL;
-	}
 
-	if (attr->type == ATTR_END) {
-		/* end of enumeration */
+	if (attr->type == ATTR_END)
 		return NULL;
-	}
 
-	/* 0x100 is last known attribute for now*/
+	/* 0x100 is last known attribute for now */
 	t32 = le32_to_cpu(attr->type);
 	if ((t32 & 0xf) || (t32 > 0x100))
 		return NULL;
@@ -254,6 +249,9 @@ struct ATTRIB *mi_enum_attr(struct mft_inode *mi, struct ATTRIB *attr)
 		return NULL;
 
 	/* Check size of attribute */
+	if (asize < SIZEOF_RESIDENT)
+		return NULL;
+
 	if (!attr->non_res) {
 		if (asize < SIZEOF_RESIDENT)
 			return NULL;
@@ -264,11 +262,15 @@ struct ATTRIB *mi_enum_attr(struct mft_inode *mi, struct ATTRIB *attr)
 			return NULL;
 
 		t32 = le32_to_cpu(attr->res.data_size);
-		if (t16 + t32 > asize)
+		if (t32 > asize - t16)
 			return NULL;
 
 		return attr;
 	}
+
+	/* Validate non_res must be 1 for non-resident */
+	if (attr->non_res != 1)
+		return NULL;
 
 	/* Check some nonresident fields */
 	if (attr->name_len &&
@@ -284,6 +286,15 @@ struct ATTRIB *mi_enum_attr(struct mft_inode *mi, struct ATTRIB *attr)
 		if (attr->nres.c_unit)
 			return NULL;
 	} else if (asize + 8 < SIZEOF_NONRESIDENT_EX)
+		return NULL;
+
+	/* Check svcn/evcn validity */
+	if (le64_to_cpu(attr->nres.svcn) > le64_to_cpu(attr->nres.evcn) + 1)
+		return NULL;
+
+	/* Check data/valid/alloc size validity for non-resident */
+	if (attr->nres.data_size < attr->nres.valid_size ||
+	    attr->nres.alloc_size < attr->nres.data_size)
 		return NULL;
 
 	return attr;
