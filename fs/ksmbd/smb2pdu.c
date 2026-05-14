@@ -1164,6 +1164,11 @@ static int alloc_preauth_hash(struct ksmbd_session *sess,
 	if (sess->Preauth_HashValue)
 		return 0;
 
+	if (!conn->preauth_info) {
+		ksmbd_err("preauth_info is NULL\n");
+		return -EINVAL;
+	}
+
 	sess->Preauth_HashValue = kmalloc(PREAUTH_HASHVALUE_SIZE, GFP_KERNEL);
 	if (!sess->Preauth_HashValue)
 		return -ENOMEM;
@@ -1299,10 +1304,17 @@ static struct ksmbd_user *session_user(struct ksmbd_conn *conn,
 	struct authenticate_message *authblob;
 	struct ksmbd_user *user;
 	char *name;
-	int sz;
+	int sz, blob_len;
 
 	authblob = user_authblob(conn, req);
+	blob_len = le16_to_cpu(req->SecurityBufferLength);
 	sz = le32_to_cpu(authblob->UserName.BufferOffset);
+	if (sz < sizeof(struct authenticate_message) ||
+	    sz + le16_to_cpu(authblob->UserName.Length) > blob_len) {
+		ksmbd_debug(SMB, "invalid auth blob field offsets\n");
+		return NULL;
+	}
+
 	name = smb_strndup_from_utf16((const char *)authblob + sz,
 				      le16_to_cpu(authblob->UserName.Length),
 				      true,
@@ -7562,6 +7574,12 @@ int smb2_ioctl(struct ksmbd_work *work)
 			goto out;
 		}
 
+		if (le32_to_cpu(req->InputCount) <
+		    sizeof(struct validate_negotiate_info_req)) {
+			ret = -EINVAL;
+			goto out;
+		}
+
 		ret = fsctl_validate_negotiate_info(conn,
 			(struct validate_negotiate_info_req *)&req->Buffer[0],
 			(struct validate_negotiate_info_rsp *)&rsp->Buffer[0]);
@@ -7609,6 +7627,11 @@ int smb2_ioctl(struct ksmbd_work *work)
 		fsctl_copychunk(work, req, rsp);
 		break;
 	case FSCTL_SET_SPARSE:
+		if (le32_to_cpu(req->InputCount) < sizeof(struct file_sparse)) {
+			ret = -EINVAL;
+			goto out;
+		}
+
 		ret = fsctl_set_sparse(work, id,
 			(struct file_sparse *)&req->Buffer[0]);
 		if (ret < 0)
@@ -7624,6 +7647,12 @@ int smb2_ioctl(struct ksmbd_work *work)
 			ksmbd_debug(SMB,
 				"User does not have write permission\n");
 			ret = -EACCES;
+			goto out;
+		}
+
+		if (le32_to_cpu(req->InputCount) <
+		    sizeof(struct file_zero_data_information)) {
+			ret = -EINVAL;
 			goto out;
 		}
 
@@ -7646,6 +7675,12 @@ int smb2_ioctl(struct ksmbd_work *work)
 		break;
 	}
 	case FSCTL_QUERY_ALLOCATED_RANGES:
+		if (le32_to_cpu(req->InputCount) <
+		    sizeof(struct file_allocated_range_buffer)) {
+			ret = -EINVAL;
+			goto out;
+		}
+
 		ret = fsctl_query_allocated_ranges(work, id,
 			(struct file_allocated_range_buffer *)&req->Buffer[0],
 			(struct file_allocated_range_buffer *)&rsp->Buffer[0],
