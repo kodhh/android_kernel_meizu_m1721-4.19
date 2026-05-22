@@ -185,6 +185,14 @@
 	usb3: ssusb@7000000 {
 		vbus_dwc3-supply = <&smbcharger_charger_otg>;
 		qcom,detect-dpdm-floating;
+
+		dwc3@7000000 {
+			dr_mode = "otg";
+			snps,dis_u2_susphy_quirk;
+			snps,dis_u3_susphy_quirk;
+			snps,dis_enblslpm_quirk;
+			snps,disable-clk-gating;
+		};
 	};
 
 	qcom_seecom: qseecom@84A00000 {
@@ -539,4 +547,26 @@
 			};
 		};
 	};
+};
+
+&pm8953_gpios {
+	/* GPIO 8 (USB_HS_ID) */
+	gpio@c700 {
+		qcom,vin-sel = <1>;
+		status = "okay";
+	};
+};
+
+&qusb_phy {
+	qcom,qusb-phy-init-seq = <0xF8 0x80
+				0x23 0x84
+				0x83 0x88
+				0xC0 0x8C
+				0x14 0x9C
+				0x30 0x08
+				0x79 0x0C
+				0x21 0x10
+				0x00 0x90
+				0x9F 0x1C
+				0x00 0x18>;
 };
