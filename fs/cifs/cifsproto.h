@@ -155,9 +155,11 @@ extern void cifs_set_oplock_level(struct cifsInodeInfo *cinode, __u32 oplock);
 extern int cifs_get_writer(struct cifsInodeInfo *cinode);
 extern void cifs_put_writer(struct cifsInodeInfo *cinode);
 extern void cifs_done_oplock_break(struct cifsInodeInfo *cinode);
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 extern int cifs_unlock_range(struct cifsFileInfo *cfile,
 			     struct file_lock *flock, const unsigned int xid);
 extern int cifs_push_mandatory_locks(struct cifsFileInfo *cfile);
+#endif
 
 extern void cifs_down_write(struct rw_semaphore *sem);
 extern struct cifsFileInfo *cifs_new_fileinfo(struct cifs_fid *fid,
@@ -252,6 +254,19 @@ extern int cifs_negotiate_protocol(const unsigned int xid,
 extern int cifs_setup_session(const unsigned int xid, struct cifs_ses *ses,
 			      struct nls_table *nls_info);
 extern int cifs_enable_signing(struct TCP_Server_Info *server, bool mnt_sign_required);
+
+extern int get_dfs_path(const unsigned int xid, struct cifs_ses *ses,
+			const char *old_path,
+			const struct nls_table *nls_codepage,
+			unsigned int *num_referrals,
+			struct dfs_info3_param **referrals, int remap);
+extern int parse_dfs_referrals(struct get_dfs_referral_rsp *rsp, u32 rsp_size,
+			       unsigned int *num_of_nodes,
+			       struct dfs_info3_param **target_nodes,
+			       const struct nls_table *nls_codepage, int remap,
+			       const char *searchName, bool is_unicode);
+
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 extern int CIFSSMBNegotiate(const unsigned int xid, struct cifs_ses *ses);
 
 extern int CIFSTCon(const unsigned int xid, struct cifs_ses *ses,
@@ -295,16 +310,6 @@ extern int CIFSGetDFSRefer(const unsigned int xid, struct cifs_ses *ses,
 			   unsigned int *num_of_nodes,
 			   const struct nls_table *nls_codepage, int remap);
 
-extern int get_dfs_path(const unsigned int xid, struct cifs_ses *ses,
-			const char *old_path,
-			const struct nls_table *nls_codepage,
-			unsigned int *num_referrals,
-			struct dfs_info3_param **referrals, int remap);
-extern int parse_dfs_referrals(struct get_dfs_referral_rsp *rsp, u32 rsp_size,
-			       unsigned int *num_of_nodes,
-			       struct dfs_info3_param **target_nodes,
-			       const struct nls_table *nls_codepage, int remap,
-			       const char *searchName, bool is_unicode);
 extern void reset_cifs_unix_caps(unsigned int xid, struct cifs_tcon *tcon,
 				 struct cifs_sb_info *cifs_sb,
 				 struct smb_vol *vol);
@@ -451,6 +456,7 @@ extern int CIFSSMBPosixLock(const unsigned int xid, struct cifs_tcon *tcon,
 extern int CIFSSMBTDis(const unsigned int xid, struct cifs_tcon *tcon);
 extern int CIFSSMBEcho(struct TCP_Server_Info *server);
 extern int CIFSSMBLogoff(const unsigned int xid, struct cifs_ses *ses);
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
 extern struct cifs_ses *sesInfoAlloc(void);
 extern void sesInfoFree(struct cifs_ses *);
@@ -484,6 +490,8 @@ extern int CIFSSMBNotify(const unsigned int xid, struct cifs_tcon *tcon,
 			__u32 filter, struct file *file, int multishot,
 			const struct nls_table *nls_codepage);
 #endif /* was needed for dnotify, and will be needed for inotify when VFS fix */
+
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 extern int CIFSSMBCopy(unsigned int xid,
 			struct cifs_tcon *source_tcon,
 			const char *fromName,
@@ -514,6 +522,7 @@ extern int CIFSSMBSetPosixACL(const unsigned int xid, struct cifs_tcon *tcon,
 		const struct nls_table *nls_codepage, int remap_special_chars);
 extern int CIFSGetExtAttr(const unsigned int xid, struct cifs_tcon *tcon,
 			const int netfid, __u64 *pExtAttrBits, __u64 *pMask);
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 extern void cifs_autodisable_serverino(struct cifs_sb_info *cifs_sb);
 extern bool couldbe_mf_symlink(const struct cifs_fattr *fattr);
 extern int check_mf_symlink(unsigned int xid, struct cifs_tcon *tcon,

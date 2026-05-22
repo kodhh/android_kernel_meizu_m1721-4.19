@@ -32,6 +32,7 @@
 #include <linux/slab.h>
 #include "cifs_spnego.h"
 
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 static __u32 cifs_ssetup_hdr(struct cifs_ses *ses, SESSION_SETUP_ANDX *pSMB)
 {
 	__u32 capabilities = 0;
@@ -76,7 +77,9 @@ static __u32 cifs_ssetup_hdr(struct cifs_ses *ses, SESSION_SETUP_ANDX *pSMB)
 
 	return capabilities;
 }
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 static void
 unicode_oslm_strings(char **pbcc_area, const struct nls_table *nls_cp)
 {
@@ -276,6 +279,7 @@ static void decode_ascii_ssetup(char **pbcc_area, __u16 bleft,
 	   for it later, but it is not very important */
 	cifs_dbg(FYI, "ascii: bytes left %d\n", bleft);
 }
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
 int decode_ntlmssp_challenge(char *bcc_ptr, int blob_len,
 				    struct cifs_ses *ses)
@@ -503,6 +507,7 @@ setup_ntlmv2_ret:
 	return rc;
 }
 
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 enum securityEnum
 cifs_select_sectype(struct TCP_Server_Info *server, enum securityEnum requested)
 {
@@ -1478,3 +1483,4 @@ out:
 	kfree(sess_data);
 	return rc;
 }
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */

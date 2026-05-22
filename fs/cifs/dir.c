@@ -250,6 +250,7 @@ cifs_do_create(struct inode *inode, struct dentry *direntry, unsigned int xid,
 		goto out;
 	}
 
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 	if (tcon->unix_ext && cap_unix(tcon->ses) && !tcon->broken_posix_open &&
 	    (CIFS_UNIX_POSIX_PATH_OPS_CAP &
 			le64_to_cpu(tcon->fsUnixInfo.Capability))) {
@@ -318,6 +319,7 @@ cifs_do_create(struct inode *inode, struct dentry *direntry, unsigned int xid,
 		 * rare for path not covered on files)
 		 */
 	}
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
 	desired_access = 0;
 	if (OPEN_FMODE(oflags) & FMODE_READ)
@@ -380,6 +382,7 @@ cifs_do_create(struct inode *inode, struct dentry *direntry, unsigned int xid,
 	 * If Open reported that we actually created a file then we now have to
 	 * set the mode if possible.
 	 */
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 	if ((tcon->unix_ext) && (*oplock & CIFS_CREATE_ACTION)) {
 		struct cifs_unix_set_info_args args = {
 				.mode	= mode,
@@ -410,13 +413,19 @@ cifs_do_create(struct inode *inode, struct dentry *direntry, unsigned int xid,
 
 		/* Could set r/o dos attribute if mode & 0222 == 0 */
 	}
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 cifs_create_get_file_info:
+#endif
 	/* server might mask mode so we have to query for it */
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 	if (tcon->unix_ext)
 		rc = cifs_get_inode_info_unix(&newinode, full_path, inode->i_sb,
 					      xid);
-	else {
+	else
+#endif
+	{
 		rc = cifs_get_inode_info(&newinode, full_path, buf, inode->i_sb,
 					 xid, fid);
 		if (newinode) {
@@ -434,8 +443,9 @@ cifs_create_get_file_info:
 			}
 		}
 	}
-
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 cifs_create_set_dentry:
+#endif
 	if (rc != 0) {
 		cifs_dbg(FYI, "Create worked, get_inode_info failed rc = %d\n",
 			 rc);
@@ -626,7 +636,7 @@ int cifs_mknod(struct inode *inode, struct dentry *direntry, umode_t mode,
 	struct cifs_tcon *tcon;
 	struct cifs_io_parms io_parms;
 	char *full_path = NULL;
-	struct inode *newinode = NULL;
+	struct inode *newinode __maybe_unused = NULL;
 	__u32 oplock = 0;
 	struct cifs_fid fid;
 	struct cifs_open_parms oparms;
@@ -653,6 +663,7 @@ int cifs_mknod(struct inode *inode, struct dentry *direntry, umode_t mode,
 		goto mknod_out;
 	}
 
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 	if (tcon->unix_ext) {
 		struct cifs_unix_set_info_args args = {
 			.mode	= mode & ~current_umask(),
@@ -681,6 +692,7 @@ int cifs_mknod(struct inode *inode, struct dentry *direntry, umode_t mode,
 			d_instantiate(direntry, newinode);
 		goto mknod_out;
 	}
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
 	if (!S_ISCHR(mode) && !S_ISBLK(mode))
 		goto mknod_out;

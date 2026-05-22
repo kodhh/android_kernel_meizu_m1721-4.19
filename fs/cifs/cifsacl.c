@@ -114,6 +114,7 @@ static struct key_type cifs_idmap_key_type = {
 	.describe    = user_describe,
 };
 
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 static char *
 sid_to_key_str(struct cifs_sid *sidptr, unsigned int type)
 {
@@ -458,6 +459,7 @@ got_valid_id:
 		fattr->cf_gid = fgid;
 	return 0;
 }
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
 int
 init_cifs_idmap(void)
@@ -519,6 +521,7 @@ exit_cifs_idmap(void)
 	cifs_dbg(FYI, "Unregistered %s key type\n", cifs_idmap_key_type.name);
 }
 
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 /* copy ntsd, owner sid, and group sid from a security descriptor to another */
 static void copy_sec_desc(const struct cifs_ntsd *pntsd,
 				struct cifs_ntsd *pnntsd, __u32 sidsoffset)
@@ -985,7 +988,9 @@ static int build_sec_desc(struct cifs_ntsd *pntsd, struct cifs_ntsd *pnntsd,
 
 	return rc;
 }
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 struct cifs_ntsd *get_cifs_acl_by_fid(struct cifs_sb_info *cifs_sb,
 		const struct cifs_fid *cifsfid, u32 *pacllen)
 {
@@ -1072,8 +1077,10 @@ struct cifs_ntsd *get_cifs_acl(struct cifs_sb_info *cifs_sb,
 	cifsFileInfo_put(open_file);
 	return pntsd;
 }
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
 
  /* Set an ACL on the server */
+#ifdef CONFIG_CIFS_ALLOW_INSECURE_LEGACY
 int set_cifs_acl(struct cifs_ntsd *pnntsd, __u32 acllen,
 			struct inode *inode, const char *path, int aclflag)
 {
@@ -1237,3 +1244,4 @@ id_mode_to_cifs_acl(struct inode *inode, const char *path, __u64 nmode,
 	kfree(pntsd);
 	return rc;
 }
+#endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
