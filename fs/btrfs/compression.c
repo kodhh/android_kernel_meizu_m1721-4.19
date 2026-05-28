@@ -1614,14 +1614,22 @@ unsigned int btrfs_compress_str2level(const char *str)
 	
 	/* Support both zlib and zstd compression levels */
 	if (strncmp(str, "zlib", 4) == 0) {
+		const char *l = str + 4;
+		/* Skip colon separator if present (e.g. "zlib:9") */
+		if (*l == ':')
+			l++;
 		/* zlib: level 1-9 */
-		if ('1' <= str[4] && str[4] <= '9')
-			level = str[4] - '0';
+		if ('1' <= *l && *l <= '9')
+			level = *l - '0';
 	} else if (strncmp(str, "zstd", 4) == 0) {
 		/* zstd: support level 1-22 */
 		char *endptr;
 		const char *level_str = str + 4;
-		
+
+		/* Skip colon separator if present (e.g. "zstd:9") */
+		if (*level_str == ':')
+			level_str++;
+
 		if (*level_str != '\0') {
 			level = simple_strtoul(level_str, &endptr, 10);
 			if (*endptr != '\0') {

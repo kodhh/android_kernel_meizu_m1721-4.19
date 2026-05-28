@@ -61,7 +61,7 @@ int btrfs_insert_file_extent(struct btrfs_trans_handle *trans,
 	btrfs_set_file_extent_ram_bytes(leaf, item, ram_bytes);
 	btrfs_set_file_extent_generation(leaf, item, trans->transid);
 	btrfs_set_file_extent_type(leaf, item, BTRFS_FILE_EXTENT_REG);
-	btrfs_set_file_extent_compression(leaf, item, compression);
+	btrfs_set_file_extent_compression(leaf, item, compression & 0xF);
 	btrfs_set_file_extent_encryption(leaf, item, encryption);
 	btrfs_set_file_extent_other_encoding(leaf, item, other_encoding);
 
