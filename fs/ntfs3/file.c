@@ -13,6 +13,7 @@
 #include <linux/msdos_fs.h> /* FAT_IOCTL_XXX */
 #include <linux/nls.h>
 #include <linux/uio.h>
+#include <linux/xattr.h>
 
 #include "debug.h"
 #include "ntfs.h"
@@ -692,6 +693,32 @@ int ntfs3_setattr(struct dentry *dentry,
 #else
 	setattr_copy(inode, attr);
 #endif
+
+	/* Persist uid/gid as EA so chown survives remount */
+	if (ia_valid & ATTR_UID) {
+		__le32 uid_val = cpu_to_le32(
+			from_kuid(&init_user_ns, inode->i_uid));
+		if (uid_eq(inode->i_uid, sbi->options.fs_uid))
+			ntfs_set_ea(inode, SYSTEM_NTFS_UID,
+				    sizeof(SYSTEM_NTFS_UID) - 1,
+				    NULL, 0, XATTR_REPLACE, 0);
+		else
+			ntfs_set_ea(inode, SYSTEM_NTFS_UID,
+				    sizeof(SYSTEM_NTFS_UID) - 1,
+				    &uid_val, 4, 0, 0);
+	}
+	if (ia_valid & ATTR_GID) {
+		__le32 gid_val = cpu_to_le32(
+			from_kgid(&init_user_ns, inode->i_gid));
+		if (gid_eq(inode->i_gid, sbi->options.fs_gid))
+			ntfs_set_ea(inode, SYSTEM_NTFS_GID,
+				    sizeof(SYSTEM_NTFS_GID) - 1,
+				    NULL, 0, XATTR_REPLACE, 0);
+		else
+			ntfs_set_ea(inode, SYSTEM_NTFS_GID,
+				    sizeof(SYSTEM_NTFS_GID) - 1,
+				    &gid_val, 4, 0, 0);
+	}
 
 	if (mode != inode->i_mode) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)

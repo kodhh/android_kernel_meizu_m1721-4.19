@@ -828,6 +828,16 @@ int ntfs_permission(struct inode *inode,
 ssize_t ntfs_listxattr(struct dentry *dentry, char *buffer, size_t size);
 extern const struct xattr_handler *ntfs_xattr_handlers[];
 
+/* EA names used by ntfs3 to persist Linux metadata */
+#define SYSTEM_NTFS_UID      "system.ntfs_uid"
+#define SYSTEM_NTFS_GID      "system.ntfs_gid"
+
+int ntfs_get_ea(struct inode *inode, const char *name, size_t name_len,
+		void *buffer, size_t size, size_t *required);
+noinline int ntfs_set_ea(struct inode *inode, const char *name,
+			 size_t name_len, const void *value,
+			 size_t val_size, int flags, int locked);
+
 /* globals from lznt.c */
 struct lznt *get_lznt_ctx(int level);
 size_t compress_lznt(const void *uncompressed, size_t uncompressed_size,

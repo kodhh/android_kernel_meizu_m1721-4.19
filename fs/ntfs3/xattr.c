@@ -197,8 +197,8 @@ out:
 	return err ? err : ret;
 }
 
-static int ntfs_get_ea(struct inode *inode, const char *name, size_t name_len,
-		       void *buffer, size_t size, size_t *required)
+int ntfs_get_ea(struct inode *inode, const char *name, size_t name_len,
+		void *buffer, size_t size, size_t *required)
 {
 	struct ntfs_inode *ni = ntfs_i(inode);
 	const struct EA_INFO *info;
@@ -258,9 +258,9 @@ out:
 	return err ? err : len;
 }
 
-static noinline int ntfs_set_ea(struct inode *inode, const char *name,
-				size_t name_len, const void *value,
-				size_t val_size, int flags, int locked)
+noinline int ntfs_set_ea(struct inode *inode, const char *name,
+			 size_t name_len, const void *value,
+			 size_t val_size, int flags, int locked)
 {
 	struct ntfs_inode *ni = ntfs_i(inode);
 	struct ntfs_sb_info *sbi = ni->mi.sbi;
@@ -574,14 +574,10 @@ static noinline int ntfs_set_acl_ex(
 				mark_inode_dirty(inode);
 			}
 
-			if (!err) {
-				/*
-				 * acl can be exactly represented in the
-				 * traditional file mode permission bits
-				 */
-				acl = NULL;
-				goto out;
-			}
+			/* Always store the ACL as EA so the mode can be
+			 * restored after remount.  NTFS has no on-disk
+			 * inode mode bits;  ACL is the only channel.
+			 */
 		}
 		name = XATTR_NAME_POSIX_ACL_ACCESS;
 		name_len = sizeof(XATTR_NAME_POSIX_ACL_ACCESS) - 1;
@@ -611,7 +607,7 @@ static noinline int ntfs_set_acl_ex(
 #else
 	err = posix_acl_to_xattr(&init_user_ns, acl, value, size);
 #endif
-	if (err)
+	if (err < 0)
 		goto out;
 
 	err = ntfs_set_ea(inode, name, name_len, value, size, 0, locked);

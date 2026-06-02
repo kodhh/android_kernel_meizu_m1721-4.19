@@ -15,6 +15,10 @@
 #include <linux/version.h>
 #include <linux/writeback.h>
 
+#ifdef CONFIG_NTFS3_FS_POSIX_ACL
+#include <linux/posix_acl.h>
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
 #include <linux/iversion.h>
 #endif
@@ -449,6 +453,38 @@ end_enum:
 	if (!(ni->ni_flags & NI_FLAG_EA)) {
 		/* if no xattr then no security (stored in xattr) */
 		inode->i_flags |= S_NOSEC;
+	}
+#ifdef CONFIG_NTFS3_FS_POSIX_ACL
+	/* Restore mode from persisted ACL so chmod survives remount */
+	if ((sb->s_flags & MS_POSIXACL) && (ni->ni_flags & NI_FLAG_EA)) {
+		struct posix_acl *acl = ntfs_get_acl(inode, ACL_TYPE_ACCESS);
+		if (!IS_ERR(acl) && acl) {
+			umode_t acl_mode = inode->i_mode;
+			int eq = posix_acl_equiv_mode(acl, &acl_mode);
+			if (eq >= 0)
+				inode->i_mode = acl_mode;
+			posix_acl_release(acl);
+		}
+	}
+#endif
+	/* Restore uid/gid from EA so chown survives remount */
+	if (ni->ni_flags & NI_FLAG_EA) {
+		__le32 v;
+		int ret;
+
+		ret = ntfs_get_ea(inode, SYSTEM_NTFS_UID,
+				  sizeof(SYSTEM_NTFS_UID) - 1,
+				  &v, sizeof(v), NULL);
+		if (ret == sizeof(v))
+			inode->i_uid = make_kuid(&init_user_ns,
+						 le32_to_cpu(v));
+
+		ret = ntfs_get_ea(inode, SYSTEM_NTFS_GID,
+				  sizeof(SYSTEM_NTFS_GID) - 1,
+				  &v, sizeof(v), NULL);
+		if (ret == sizeof(v))
+			inode->i_gid = make_kgid(&init_user_ns,
+						 le32_to_cpu(v));
 	}
 
 Ok:
