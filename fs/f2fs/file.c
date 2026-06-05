@@ -576,10 +576,12 @@ static int finish_preallocate_blocks(struct inode *inode)
 	}
 
 	f2fs_down_write(&F2FS_I(inode)->i_gc_rwsem[WRITE]);
+	down_write(&inode->i_mapping->invalidate_lock);
 
 	truncate_setsize(inode, i_size_read(inode));
 	ret = f2fs_truncate(inode);
 
+	up_write(&inode->i_mapping->invalidate_lock);
 	f2fs_up_write(&F2FS_I(inode)->i_gc_rwsem[WRITE]);
 
 	if (!ret)
@@ -1847,7 +1849,7 @@ static long f2fs_fallocate(struct file *file, int mode,
 
 	inode_lock(inode);
 
-	ret = file_update_time(file);
+	ret = file_modified(file);
 	if (ret)
 		goto out;
 

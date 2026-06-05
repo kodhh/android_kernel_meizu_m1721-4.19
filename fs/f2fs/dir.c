@@ -117,7 +117,7 @@ static int __f2fs_setup_filename(const struct inode *dir,
 #ifdef CONFIG_FS_ENCRYPTION
 	fname->crypto_buf = crypt_name->crypto_buf;
 #endif
-	if (crypt_name->is_ciphertext_name) {
+	if (crypt_name->is_nokey_name) {
 		/* hash was decoded from the no-key name */
 		fname->hash = cpu_to_le32(crypt_name->hash);
 	} else {
@@ -949,11 +949,8 @@ void f2fs_delete_entry(struct f2fs_dir_entry *dentry, struct page *page,
 		inode_dec_dirty_pages(dir);
 		f2fs_remove_dirty_inode(dir);
 
-		if (PagePrivate(page)) {
-			set_page_private(page, 0);
-			ClearPagePrivate(page);
-			put_page(page);
-		}
+		detach_page_private(page);
+		set_page_private(page, 0);
 	}
 	f2fs_put_page(page, 1);
 

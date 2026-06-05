@@ -89,9 +89,7 @@ bool f2fs_is_compressed_page(struct page *page)
 static void f2fs_set_compressed_page(struct page *page,
 		struct inode *inode, pgoff_t index, void *data)
 {
-	get_page(page);
-	set_page_private(page, (unsigned long)data);
-	SetPagePrivate(page);
+	attach_page_private(page, (void *)data);
 
 	/* i_crypto_info and iv index */
 	page->index = index;
@@ -338,29 +336,34 @@ static const struct f2fs_compress_ops f2fs_lz4_ops = {
 
 static int zstd_init_compress_ctx(struct compress_ctx *cc)
 {
+	ZSTD_parameters params;
 	ZSTD_CStream *stream;
+	void *workspace;
+	unsigned int workspace_size;
 	unsigned char level = F2FS_I(cc->inode)->i_compress_flag >>
 						COMPRESS_LEVEL_OFFSET;
-	int ret;
 
 	if (!level)
 		level = F2FS_ZSTD_DEFAULT_CLEVEL;
 
-	stream = ZSTD_createCStream();
-	if (!stream)
+	params = ZSTD_getParams(level, cc->rlen, 0);
+	workspace_size = ZSTD_CStreamWorkspaceBound(params.cParams);
+
+	workspace = f2fs_kvmalloc(F2FS_I_SB(cc->inode),
+					workspace_size, GFP_NOFS);
+	if (!workspace)
 		return -ENOMEM;
 
-	ret = ZSTD_initCStream(stream, level);
-	if (ZSTD_isError(ret)) {
-		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_initCStream failed, ret: %d\n",
+	stream = ZSTD_initCStream(params, 0, workspace, workspace_size);
+	if (!stream) {
+		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_initCStream failed\n",
 				KERN_ERR, F2FS_I_SB(cc->inode)->sb->s_id,
-				__func__, ZSTD_getErrorCode(ret));
-		ZSTD_freeCStream(stream);
+				__func__);
+		kvfree(workspace);
 		return -EIO;
 	}
 
-	cc->private = stream;
-	cc->private2 = NULL;
+	cc->private = workspace;
 	cc->private2 = stream;
 
 	cc->clen = cc->rlen - PAGE_SIZE - COMPRESS_HEADER_SIZE;
@@ -369,7 +372,7 @@ static int zstd_init_compress_ctx(struct compress_ctx *cc)
 
 static void zstd_destroy_compress_ctx(struct compress_ctx *cc)
 {
-	ZSTD_freeCStream(cc->private);
+	kvfree(cc->private);
 	cc->private = NULL;
 	cc->private2 = NULL;
 }
@@ -421,22 +424,28 @@ static int zstd_compress_pages(struct compress_ctx *cc)
 static int zstd_init_decompress_ctx(struct decompress_io_ctx *dic)
 {
 	ZSTD_DStream *stream;
-	int ret;
+	void *workspace;
+	unsigned int workspace_size;
+	unsigned int max_window_size =
+			MAX_COMPRESS_WINDOW_SIZE(dic->log_cluster_size);
 
-	stream = ZSTD_createDStream();
-	if (!stream)
+	workspace_size = ZSTD_DStreamWorkspaceBound(max_window_size);
+
+	workspace = f2fs_kvmalloc(F2FS_I_SB(dic->inode),
+					workspace_size, GFP_NOFS);
+	if (!workspace)
 		return -ENOMEM;
 
-	ret = ZSTD_initDStream(stream);
-	if (ZSTD_isError(ret)) {
-		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_initDStream failed, ret: %d\n",
+	stream = ZSTD_initDStream(max_window_size, workspace, workspace_size);
+	if (!stream) {
+		printk_ratelimited("%sF2FS-fs (%s): %s ZSTD_initDStream failed\n",
 				KERN_ERR, F2FS_I_SB(dic->inode)->sb->s_id,
-				__func__, ZSTD_getErrorCode(ret));
-		ZSTD_freeDStream(stream);
+				__func__);
+		kvfree(workspace);
 		return -EIO;
 	}
 
-	dic->private = stream;
+	dic->private = workspace;
 	dic->private2 = stream;
 
 	return 0;
@@ -444,7 +453,7 @@ static int zstd_init_decompress_ctx(struct decompress_io_ctx *dic)
 
 static void zstd_destroy_decompress_ctx(struct decompress_io_ctx *dic)
 {
-	ZSTD_freeDStream(dic->private);
+	kvfree(dic->private);
 	dic->private = NULL;
 	dic->private2 = NULL;
 }
@@ -550,11 +559,7 @@ static void f2fs_compress_free_page(struct page *page)
 {
 	if (!page)
 		return;
-	if (PagePrivate(page)) {
-		set_page_private(page, 0);
-		ClearPagePrivate(page);
-		put_page(page);
-	}
+	detach_page_private(page);
 	page->mapping = NULL;
 	unlock_page(page);
 	mempool_free(page, compress_page_pool);

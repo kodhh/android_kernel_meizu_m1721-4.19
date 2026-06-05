@@ -3957,11 +3957,8 @@ void f2fs_invalidate_page(struct page *page, unsigned int offset,
 			inode->i_ino == F2FS_COMPRESS_INO(sbi))
 		clear_page_private_data(page);
 
-	if (PagePrivate(page)) {
-		set_page_private(page, 0);
-		ClearPagePrivate(page);
-		put_page(page);
-	}
+	detach_page_private(page);
+	set_page_private(page, 0);
 }
 
 int f2fs_release_page(struct page *page, gfp_t wait)
@@ -3979,11 +3976,8 @@ int f2fs_release_page(struct page *page, gfp_t wait)
 
 	clear_page_private_gcing(page);
 
-	if (PagePrivate(page)) {
-		set_page_private(page, 0);
-		ClearPagePrivate(page);
-		put_page(page);
-	}
+	detach_page_private(page);
+	set_page_private(page, 0);
 	return 1;
 }
 
