@@ -239,6 +239,13 @@ static inline gfp_t readahead_gfp_mask(struct address_space *x)
 	return mapping_gfp_mask(x) | __GFP_NORETRY | __GFP_NOWARN;
 }
 
+static inline void attach_page_private(struct page *page, void *data)
+{
+	set_page_private(page, (unsigned long)data);
+	SetPagePrivate(page);
+	get_page(page);
+}
+
 static inline void *detach_page_private(struct page *page)
 {
 	void *data = (void *)page_private(page);
