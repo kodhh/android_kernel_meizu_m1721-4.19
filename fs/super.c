@@ -22,6 +22,7 @@
  */
 
 #include <linux/export.h>
+#include <linux/fs_context.h>
 #include <linux/slab.h>
 #include <linux/blkdev.h>
 #include <linux/mount.h>
@@ -1058,6 +1059,172 @@ void kill_litter_super(struct super_block *sb)
 	kill_anon_super(sb);
 }
 EXPORT_SYMBOL(kill_litter_super);
+
+struct super_block *sget_fc(struct fs_context *fc,
+			    int (*test)(struct super_block *, struct fs_context *),
+			    int (*set)(struct super_block *, struct fs_context *))
+{
+	struct super_block *s = NULL;
+	struct super_block *old;
+	struct user_namespace *user_ns = fc->global ? &init_user_ns : fc->user_ns;
+	int err;
+
+	if (!(fc->sb_flags & SB_KERNMOUNT) &&
+	    fc->purpose != FS_CONTEXT_FOR_SUBMOUNT) {
+		if (!(fc->fs_type->fs_flags & FS_USERNS_MOUNT)) {
+			if (!capable(CAP_SYS_ADMIN))
+				return ERR_PTR(-EPERM);
+		} else {
+			if (!ns_capable(fc->user_ns, CAP_SYS_ADMIN))
+				return ERR_PTR(-EPERM);
+		}
+	}
+
+retry:
+	spin_lock(&sb_lock);
+	if (test) {
+		hlist_for_each_entry(old, &fc->fs_type->fs_supers, s_instances) {
+			if (test(old, fc))
+				goto share_extant_sb;
+		}
+	}
+	if (!s) {
+		spin_unlock(&sb_lock);
+		s = alloc_super(fc->fs_type, fc->sb_flags, user_ns);
+		if (!s)
+			return ERR_PTR(-ENOMEM);
+		goto retry;
+	}
+
+	s->s_fs_info = fc->s_fs_info;
+	err = set(s, fc);
+	if (err) {
+		s->s_fs_info = NULL;
+		spin_unlock(&sb_lock);
+		destroy_unused_super(s);
+		return ERR_PTR(err);
+	}
+	fc->s_fs_info = NULL;
+	s->s_type = fc->fs_type;
+	s->s_iflags |= fc->s_iflags;
+	strlcpy(s->s_id, s->s_type->name, sizeof(s->s_id));
+	list_add_tail(&s->s_list, &super_blocks);
+	hlist_add_head(&s->s_instances, &fc->fs_type->fs_supers);
+	spin_unlock(&sb_lock);
+	get_filesystem(s->s_type);
+	register_shrinker_prepared(&s->s_shrink);
+	return s;
+
+share_extant_sb:
+	if (user_ns != old->s_user_ns) {
+		spin_unlock(&sb_lock);
+		destroy_unused_super(s);
+		return ERR_PTR(-EBUSY);
+	}
+	if (!grab_super(old))
+		goto retry;
+	destroy_unused_super(s);
+	return old;
+}
+EXPORT_SYMBOL(sget_fc);
+
+int set_anon_super_fc(struct super_block *sb, struct fs_context *fc)
+{
+	return set_anon_super(sb, NULL);
+}
+EXPORT_SYMBOL(set_anon_super_fc);
+
+static int test_keyed_super(struct super_block *sb, struct fs_context *fc)
+{
+	return sb->s_fs_info == fc->s_fs_info;
+}
+
+static int test_single_super(struct super_block *s, struct fs_context *fc)
+{
+	return 1;
+}
+
+/**
+ * vfs_get_super - Get a superblock with a search key
+ * @fc: Filesystem context
+ * @keying: How to key superblocks
+ * @fill_super: Helper to initialise a new superblock
+ *
+ * Search for a superblock and if found, attach to it, otherwise create a new
+ * one.  The returned superblock is locked and ready for use.
+ *
+ * The keying affects how superblocks are grouped:
+ *
+ * (1) vfs_get_single_super - Only one superblock of this type may exist on the
+ *     system.  This is typically used for special system filesystems.
+ *
+ * (2) vfs_get_keyed_super - Multiple superblocks may exist, but they must have
+ *     distinct keys (where the key is in s_fs_info).  Searching for the same
+ *     key again will turn up the superblock for that key.
+ *
+ * (3) vfs_get_independent_super - Multiple superblocks may exist and are
+ *     unkeyed.  Each call will get a new superblock.
+ *
+ * A permissions check is made by sget_fc() unless we're getting a superblock
+ * for a kernel-internal mount or a submount.
+ */
+int vfs_get_super(struct fs_context *fc,
+		  enum vfs_get_super_keying keying,
+		  int (*fill_super)(struct super_block *sb,
+				    struct fs_context *fc))
+{
+	int (*test)(struct super_block *, struct fs_context *);
+	struct super_block *sb;
+
+	switch (keying) {
+	case vfs_get_single_super:
+		test = test_single_super;
+		break;
+	case vfs_get_keyed_super:
+		test = test_keyed_super;
+		break;
+	case vfs_get_independent_super:
+		test = NULL;
+		break;
+	default:
+		BUG();
+	}
+
+	sb = sget_fc(fc, test, set_anon_super_fc);
+	if (IS_ERR(sb))
+		return PTR_ERR(sb);
+
+	if (!sb->s_root) {
+		int err = fill_super(sb, fc);
+		if (err) {
+			deactivate_locked_super(sb);
+			return err;
+		}
+
+		sb->s_flags |= SB_ACTIVE;
+	}
+
+	BUG_ON(fc->root);
+	fc->root = dget(sb->s_root);
+	return 0;
+}
+EXPORT_SYMBOL(vfs_get_super);
+
+int get_tree_nodev(struct fs_context *fc,
+		  int (*fill_super)(struct super_block *sb,
+				    struct fs_context *fc))
+{
+	return vfs_get_super(fc, vfs_get_independent_super, fill_super);
+}
+EXPORT_SYMBOL(get_tree_nodev);
+
+int get_tree_single(struct fs_context *fc,
+		  int (*fill_super)(struct super_block *sb,
+				    struct fs_context *fc))
+{
+	return vfs_get_super(fc, vfs_get_single_super, fill_super);
+}
+EXPORT_SYMBOL(get_tree_single);
 
 static int ns_test_super(struct super_block *sb, void *data)
 {

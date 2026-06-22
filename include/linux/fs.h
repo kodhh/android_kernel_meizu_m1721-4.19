@@ -2323,6 +2323,11 @@ struct super_block *sget(struct file_system_type *type,
 			int (*test)(struct super_block *,void *),
 			int (*set)(struct super_block *,void *),
 			int flags, void *data);
+struct fs_context;
+int set_anon_super_fc(struct super_block *s, struct fs_context *fc);
+struct super_block *sget_fc(struct fs_context *fc,
+			    int (*test)(struct super_block *, struct fs_context *),
+			    int (*set)(struct super_block *, struct fs_context *));
 extern struct dentry *mount_pseudo_xattr(struct file_system_type *, char *,
 					 const struct super_operations *ops,
 					 const struct xattr_handler **xattr,

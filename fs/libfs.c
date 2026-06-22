@@ -18,6 +18,8 @@
 #include <linux/buffer_head.h> /* sync_mapping_buffers */
 #include <linux/unicode.h>
 #include <linux/fscrypt.h>
+#include <linux/pseudo_fs.h>
+#include <linux/fs_context.h>
 
 #include <linux/uaccess.h>
 
@@ -238,6 +240,64 @@ EXPORT_SYMBOL(simple_dir_inode_operations);
 static const struct super_operations simple_super_operations = {
 	.statfs		= simple_statfs,
 };
+
+static int pseudo_fs_fill_super(struct super_block *s, struct fs_context *fc)
+{
+	struct pseudo_fs_context *ctx = fc->fs_private;
+	struct inode *root;
+
+	s->s_maxbytes = MAX_LFS_FILESIZE;
+	s->s_blocksize = PAGE_SIZE;
+	s->s_blocksize_bits = PAGE_SHIFT;
+	s->s_magic = ctx->magic;
+	s->s_op = ctx->ops ?: &simple_super_operations;
+	s->s_xattr = ctx->xattr;
+	s->s_time_gran = 1;
+	root = new_inode(s);
+	if (!root)
+		return -ENOMEM;
+
+	root->i_ino = 1;
+	root->i_mode = S_IFDIR | S_IRUSR | S_IWUSR;
+	root->i_atime = root->i_mtime = root->i_ctime = current_time(root);
+	s->s_root = d_make_root(root);
+	if (!s->s_root)
+		return -ENOMEM;
+	s->s_d_op = ctx->dops;
+	return 0;
+}
+
+static int pseudo_fs_get_tree(struct fs_context *fc)
+{
+	return get_tree_nodev(fc, pseudo_fs_fill_super);
+}
+
+static void pseudo_fs_free(struct fs_context *fc)
+{
+	kfree(fc->fs_private);
+}
+
+static const struct fs_context_operations pseudo_fs_context_ops = {
+	.free		= pseudo_fs_free,
+	.get_tree	= pseudo_fs_get_tree,
+};
+
+struct pseudo_fs_context *init_pseudo(struct fs_context *fc,
+					unsigned long magic)
+{
+	struct pseudo_fs_context *ctx;
+
+	ctx = kzalloc(sizeof(struct pseudo_fs_context), GFP_KERNEL);
+	if (likely(ctx)) {
+		ctx->magic = magic;
+		fc->fs_private = ctx;
+		fc->ops = &pseudo_fs_context_ops;
+		fc->sb_flags |= SB_NOUSER;
+		fc->global = true;
+	}
+	return ctx;
+}
+EXPORT_SYMBOL(init_pseudo);
 
 /*
  * Common helper for pseudo-filesystems (sockfs, pipefs, bdev - stuff that

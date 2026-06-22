@@ -102,6 +102,12 @@ extern void *__vmalloc_node_flags_caller(unsigned long size,
 					 int node, gfp_t flags, void *caller);
 #endif
 
+static inline void *__vmalloc_2(unsigned long size, gfp_t gfp_mask)
+{
+	return __vmalloc_node_flags_caller(size, -1, gfp_mask,
+					   __builtin_return_address(0));
+}
+
 extern void vfree(const void *addr);
 extern void vfree_atomic(const void *addr);
 

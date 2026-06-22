@@ -305,9 +305,8 @@ int bpf_prog_offload_info_fill(struct bpf_prog_info *info,
 	int res;
 	u32 ulen;
 
-	ns_inode = ns_get_path_cb(&ns_path, bpf_prog_offload_info_fill_ns, &args);
-	if (IS_ERR(ns_inode)) {
-		res = PTR_ERR(ns_inode);
+	res = ns_get_path_cb(&ns_path, bpf_prog_offload_info_fill_ns, &args);
+	if (res) {
 		if (!info->ifindex)
 			return -ENODEV;
 		return res;
@@ -529,9 +528,8 @@ int bpf_map_offload_info_fill(struct bpf_map_info *info, struct bpf_map *map)
 	struct path ns_path;
 	int res;
 
-	ns_inode = ns_get_path_cb(&ns_path, bpf_map_offload_info_fill_ns, &args);
-	if (IS_ERR(ns_inode)) {
-		res = PTR_ERR(ns_inode);
+	res = ns_get_path_cb(&ns_path, bpf_map_offload_info_fill_ns, &args);
+	if (res) {
 		if (!info->ifindex)
 			return -ENODEV;
 		return res;
