@@ -111,7 +111,8 @@ static void sco_sock_set_timer(struct sock *sk, long timeout)
 
 	BT_DBG("sock %p state %d timeout %ld", sk, sk->sk_state, timeout);
 	cancel_delayed_work(&sco_pi(sk)->conn->timeout_work);
-	schedule_delayed_work(&sco_pi(sk)->conn->timeout_work, timeout);
+	queue_delayed_work(system_power_efficient_wq,
+		&sco_pi(sk)->conn->timeout_work, timeout);
 }
 
 static void sco_sock_clear_timer(struct sock *sk)
@@ -398,6 +399,13 @@ static void sco_sock_kill(struct sock *sk)
 		return;
 
 	BT_DBG("sk %p state %d", sk, sk->sk_state);
+
+	/* Sock is dead, so set conn->sk to NULL to avoid possible UAF */
+	if (sco_pi(sk)->conn) {
+		sco_conn_lock(sco_pi(sk)->conn);
+		sco_pi(sk)->conn->sk = NULL;
+		sco_conn_unlock(sco_pi(sk)->conn);
+	}
 
 	/* Kill poor orphan */
 	bt_sock_unlink(&sco_sk_list, sk);

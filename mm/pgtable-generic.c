@@ -9,7 +9,7 @@
 
 #include <linux/pagemap.h>
 #include <asm/tlb.h>
-#include <asm-generic/pgtable.h>
+#include <linux/pgtable.h>
 
 /*
  * If a p?d_bad entry is found while walking page tables, report

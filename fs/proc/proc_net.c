@@ -377,3 +377,24 @@ int __init proc_net_init(void)
 
 	return register_pernet_subsys(&proc_net_ns_ops);
 }
+
+#ifdef CONFIG_BPF_SYSCALL
+int bpf_iter_init_seq_net(void *priv_data, struct bpf_iter_aux_info *aux)
+{
+#ifdef CONFIG_NET_NS
+	struct seq_net_private *p = priv_data;
+
+	p->net = get_net(current->nsproxy->net_ns);
+#endif
+	return 0;
+}
+
+void bpf_iter_fini_seq_net(void *priv_data)
+{
+#ifdef CONFIG_NET_NS
+	struct seq_net_private *p = priv_data;
+
+	put_net(p->net);
+#endif
+}
+#endif

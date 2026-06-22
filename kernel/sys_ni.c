@@ -63,6 +63,8 @@ COND_SYSCALL(epoll_create1);
 COND_SYSCALL(epoll_ctl);
 COND_SYSCALL(epoll_pwait);
 COND_SYSCALL_COMPAT(epoll_pwait);
+COND_SYSCALL(epoll_pwait2);
+COND_SYSCALL_COMPAT(epoll_pwait2);
 
 /* fs/fcntl.c */
 
@@ -87,6 +89,7 @@ COND_SYSCALL(flock);
 /* fs/nfsctl.c */
 
 /* fs/open.c */
+COND_SYSCALL(close_range);
 
 /* fs/pipe.c */
 
@@ -161,6 +164,9 @@ COND_SYSCALL(syslog);
 /* kernel/ptrace.c */
 
 /* kernel/sched/core.c */
+
+/* kernel/signal.c */
+COND_SYSCALL(pidfd_send_signal);
 
 /* kernel/sys.c */
 COND_SYSCALL(setregid);

@@ -180,6 +180,9 @@ struct netlink_callback {
 	u16			min_dump_alloc;
 	unsigned int		prev_seq, seq;
 	long			args[6];
+	struct netlink_ext_ack	*extack;
+	u16			answer_flags;
+	bool			strict_check;
 };
 
 struct netlink_notify {

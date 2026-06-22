@@ -1147,11 +1147,12 @@ EXPORT_SYMBOL_GPL(dccp_debug);
 static int __init dccp_init(void)
 {
 	unsigned long goal;
+	unsigned long nr_pages = totalram_pages;
 	int ehash_order, bhash_order, i;
 	int rc;
 
 	BUILD_BUG_ON(sizeof(struct dccp_skb_cb) >
-		     FIELD_SIZEOF(struct sk_buff, cb));
+		     sizeof_field(struct sk_buff, cb));
 	rc = percpu_counter_init(&dccp_orphan_count, 0, GFP_KERNEL);
 	if (rc)
 		goto out_fail;
@@ -1170,10 +1171,10 @@ static int __init dccp_init(void)
 	 *
 	 * The methodology is similar to that of the buffer cache.
 	 */
-	if (totalram_pages >= (128 * 1024))
-		goal = totalram_pages >> (21 - PAGE_SHIFT);
+	if (nr_pages >= (128 * 1024))
+		goal = nr_pages >> (21 - PAGE_SHIFT);
 	else
-		goal = totalram_pages >> (23 - PAGE_SHIFT);
+		goal = nr_pages >> (23 - PAGE_SHIFT);
 
 	if (thash_entries)
 		goal = (thash_entries *

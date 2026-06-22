@@ -736,7 +736,7 @@ static int ioctl_standard_iw_point(struct iw_point *iwp, unsigned int cmd,
 		if (iwp->length == descr->max_tokens + 1)
 			essid_compat = 1;
 		else if (IW_IS_SET(cmd) && (iwp->length != 0)) {
-			char essid[IW_ESSID_MAX_SIZE + 1];
+			char essid[IW_ESSID_MAX_SIZE + 1] = "0";
 			unsigned int len;
 			len = iwp->length * descr->token_size;
 
@@ -1081,6 +1081,10 @@ static int compat_standard_call(struct net_device	*dev,
 		return ioctl_standard_call(dev, iwr, cmd, info, handler);
 
 	iwp_compat = (struct compat_iw_point *) &iwr->u.data;
+
+	/* struct iw_point has a 32bit hole on 64bit arches. */
+	memset(&iwp, 0, sizeof(iwp));
+
 	iwp.pointer = compat_ptr(iwp_compat->pointer);
 	iwp.length = iwp_compat->length;
 	iwp.flags = iwp_compat->flags;

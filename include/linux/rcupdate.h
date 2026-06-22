@@ -183,6 +183,16 @@ static inline void exit_tasks_rcu_start(void) { }
 static inline void exit_tasks_rcu_finish(void) { }
 #endif /* #else #ifdef CONFIG_TASKS_RCU */
 
+#define rcu_softirq_qs_periodic(old_ts) \
+do { \
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT) && \
+	    time_after(jiffies, (old_ts) + HZ / 10)) { \
+		preempt_disable(); \
+		rcu_all_qs(); \
+		preempt_enable(); \
+	} \
+} while (0)
+
 /**
  * cond_resched_tasks_rcu_qs - Report potential quiescent states to RCU
  *

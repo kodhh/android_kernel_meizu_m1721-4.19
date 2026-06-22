@@ -398,3 +398,14 @@ void xdp_attachment_setup(struct xdp_attachment_info *info,
 	info->flags = bpf->flags;
 }
 EXPORT_SYMBOL_GPL(xdp_attachment_setup);
+
+void __xdp_release_frame(void *data, struct xdp_mem_info *mem)
+{
+}
+EXPORT_SYMBOL_GPL(__xdp_release_frame);
+
+void xdp_warn(const char *msg, const char *func, const int line)
+{
+	WARN(1, "XDP_WARN: %s(line:%d): %s\n", func, line, msg);
+}
+EXPORT_SYMBOL_GPL(xdp_warn);

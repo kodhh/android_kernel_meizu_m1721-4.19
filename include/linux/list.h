@@ -106,6 +106,12 @@ static inline void __list_del(struct list_head * prev, struct list_head * next)
 	WRITE_ONCE(prev->next, next);
 }
 
+static inline void __list_del_clearprev(struct list_head *entry)
+{
+	__list_del(entry->prev, entry->next);
+	entry->prev = NULL;
+}
+
 /**
  * list_del - deletes entry from list.
  * @entry: the element to delete from the list.
@@ -684,6 +690,11 @@ static inline void INIT_HLIST_NODE(struct hlist_node *h)
 static inline int hlist_unhashed(const struct hlist_node *h)
 {
 	return !h->pprev;
+}
+
+static inline int hlist_unhashed_lockless(const struct hlist_node *h)
+{
+	return !READ_ONCE(h->pprev);
 }
 
 static inline int hlist_empty(const struct hlist_head *h)

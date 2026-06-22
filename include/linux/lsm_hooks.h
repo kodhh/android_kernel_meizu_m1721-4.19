@@ -1694,8 +1694,8 @@ union security_list_options {
 	int (*socket_shutdown)(struct socket *sock, int how);
 	int (*socket_sock_rcv_skb)(struct sock *sk, struct sk_buff *skb);
 	int (*socket_getpeersec_stream)(struct socket *sock,
-					char __user *optval,
-					int __user *optlen, unsigned len);
+					sockptr_t optval,
+					sockptr_t optlen, unsigned len);
 	int (*socket_getpeersec_dgram)(struct socket *sock,
 					struct sk_buff *skb, u32 *secid);
 	int (*sk_alloc_security)(struct sock *sk, int family, gfp_t priority);
@@ -1787,6 +1787,7 @@ union security_list_options {
 	int (*bpf_prog_alloc_security)(struct bpf_prog_aux *aux);
 	void (*bpf_prog_free_security)(struct bpf_prog_aux *aux);
 #endif /* CONFIG_BPF_SYSCALL */
+	int (*locked_down)(enum lockdown_reason what);
 #ifdef CONFIG_PERF_EVENTS
 	int (*perf_event_open)(struct perf_event_attr *attr, int type);
 	int (*perf_event_alloc)(struct perf_event *event);
@@ -2030,6 +2031,7 @@ struct security_hook_heads {
 	struct hlist_head bpf_prog_alloc_security;
 	struct hlist_head bpf_prog_free_security;
 #endif /* CONFIG_BPF_SYSCALL */
+	struct hlist_head locked_down;
 #ifdef CONFIG_PERF_EVENTS
 	struct hlist_head perf_event_open;
 	struct hlist_head perf_event_alloc;

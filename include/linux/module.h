@@ -456,6 +456,10 @@ struct module {
 	struct trace_eval_map **trace_evals;
 	unsigned int num_trace_evals;
 #endif
+#ifdef CONFIG_BPF_EVENTS
+	unsigned int num_bpf_raw_events;
+	struct bpf_raw_event_map *bpf_raw_events;
+#endif
 #ifdef CONFIG_FTRACE_MCOUNT_RECORD
 	unsigned int num_ftrace_callsites;
 	unsigned long *ftrace_callsites;

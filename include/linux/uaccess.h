@@ -362,6 +362,11 @@ extern long strnlen_unsafe_user(const void __user *unsafe_addr, long count);
 #define probe_kernel_address(addr, retval)		\
 	probe_kernel_read(&retval, addr, sizeof(retval))
 
+static inline long copy_from_kernel_nofault(void *dst, const void *src, size_t size)
+{
+	return probe_kernel_read(dst, src, size);
+}
+
 #ifndef user_access_begin
 #define user_access_begin(type, ptr, len) access_ok(type, ptr, len)
 #define user_access_end() do { } while (0)
@@ -370,6 +375,60 @@ extern long strnlen_unsafe_user(const void __user *unsafe_addr, long count);
 static inline unsigned long user_access_save(void) { return 0UL; }
 static inline void user_access_restore(unsigned long flags) { }
 #endif
+
+#ifndef nmi_uaccess_okay
+#define nmi_uaccess_okay() true
+#endif
+
+static inline long copy_from_user_nofault(void *dst, const void __user *src, size_t size)
+{
+	return probe_user_read(dst, src, size);
+}
+
+static inline long copy_to_user_nofault(void __user *dst, const void *src, size_t size)
+{
+	return probe_user_write(dst, src, size);
+}
+
+static inline long strncpy_from_user_nofault(char *dst, const void __user *unsafe_addr, long count)
+{
+	long idx = 0;
+	char c;
+
+	if (unlikely(count <= 0))
+		return 0;
+
+	while (idx < count - 1) {
+		if (probe_user_read(&c, unsafe_addr + idx, 1))
+			return -EFAULT;
+		dst[idx] = c;
+		if (!c)
+			return idx + 1;
+		idx++;
+	}
+	dst[idx] = '\0';
+	return idx;
+}
+
+static inline long strncpy_from_kernel_nofault(char *dst, const void *unsafe_addr, long count)
+{
+	long idx = 0;
+	char c;
+
+	if (unlikely(count <= 0))
+		return 0;
+
+	while (idx < count - 1) {
+		if (probe_kernel_read(&c, unsafe_addr + idx, 1))
+			return -EFAULT;
+		dst[idx] = c;
+		if (!c)
+			return idx + 1;
+		idx++;
+	}
+	dst[idx] = '\0';
+	return idx;
+}
 
 #ifdef CONFIG_HARDENED_USERCOPY
 void usercopy_warn(const char *name, const char *detail, bool to_user,

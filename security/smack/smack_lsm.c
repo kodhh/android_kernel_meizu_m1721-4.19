@@ -4086,8 +4086,8 @@ access_check:
  * returns zero on success, an error code otherwise
  */
 static int smack_socket_getpeersec_stream(struct socket *sock,
-					  char __user *optval,
-					  int __user *optlen, unsigned len)
+					  sockptr_t optval,
+					  sockptr_t optlen, unsigned len)
 {
 	struct socket_smack *ssp;
 	char *rcp = "";
@@ -4102,10 +4102,10 @@ static int smack_socket_getpeersec_stream(struct socket *sock,
 
 	if (slen > len)
 		rc = -ERANGE;
-	else if (copy_to_user(optval, rcp, slen) != 0)
+	else if (copy_to_sockptr(optval, rcp, slen) != 0)
 		rc = -EFAULT;
 
-	if (put_user(slen, optlen) != 0)
+	if (copy_to_sockptr(optlen, &slen, sizeof(slen)) != 0)
 		rc = -EFAULT;
 
 	return rc;

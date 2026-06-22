@@ -243,6 +243,10 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 
 #include <uapi/linux/types.h>
 
+#ifndef fallthrough
+# define fallthrough			__attribute__((__fallthrough__))
+#endif
+
 #define __READ_ONCE_SIZE						\
 ({									\
 	switch (size) {							\

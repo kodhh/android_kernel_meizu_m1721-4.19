@@ -133,3 +133,15 @@ void sha_init(__u32 *buf)
 	buf[4] = 0xc3d2e1f0;
 }
 EXPORT_SYMBOL(sha_init);
+
+void sha1_init(__u32 *buf)
+{
+	sha_init(buf);
+}
+EXPORT_SYMBOL(sha1_init);
+
+void sha1_transform(__u32 *digest, const char *data, __u32 *array)
+{
+	sha_transform(digest, data, array);
+}
+EXPORT_SYMBOL(sha1_transform);

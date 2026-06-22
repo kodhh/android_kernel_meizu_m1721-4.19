@@ -1269,7 +1269,7 @@ static u32 cfg80211_calculate_bitrate_he(struct rate_info *rate)
 	u32 rates_52[3]  =  {  18820000,  17777777,  16000000 };
 	u32 rates_26[3]  =  {   9411111,   8888888,   8000000 };
 	u64 tmp;
-	u32 result;
+	u32 result = 0;
 
 	if (WARN_ON_ONCE(rate->mcs > 11))
 		return 0;
@@ -1315,12 +1315,14 @@ static u32 cfg80211_calculate_bitrate_he(struct rate_info *rate)
 	tmp = result;
 	tmp *= SCALE;
 	do_div(tmp, mcs_divisors[rate->mcs]);
-	result = tmp;
 
 	/* and take NSS, DCM into account */
-	result = (result * rate->nss) / 8;
+	tmp *= rate->nss;
+	do_div(tmp, 8);
 	if (rate->he_dcm)
-		result /= 2;
+		do_div(tmp, 2);
+
+	result = tmp;
 
 	return result / 10000;
 }

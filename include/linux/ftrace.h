@@ -926,4 +926,18 @@ unsigned long arch_syscall_addr(int nr);
 
 #endif /* CONFIG_FTRACE_SYSCALLS */
 
+/* BPF trampoline needs these for ftrace direct call support */
+static inline int register_ftrace_direct(unsigned long ip, unsigned long addr)
+{
+	return -ENOTSUPP;
+}
+static inline int unregister_ftrace_direct(unsigned long ip, unsigned long addr)
+{
+	return -ENOTSUPP;
+}
+static inline int modify_ftrace_direct(unsigned long ip, unsigned long old_addr, unsigned long new_addr)
+{
+	return -ENOTSUPP;
+}
+
 #endif /* _LINUX_FTRACE_H */

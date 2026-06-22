@@ -244,6 +244,20 @@ extern int _cond_resched(void);
 
 #define might_sleep_if(cond) do { if (cond) might_sleep(); } while (0)
 
+#ifdef CONFIG_DEBUG_ATOMIC_SLEEP
+extern void __cant_sleep(const char *file, int line, int preempt_offset);
+# define cant_sleep() \
+	do { __cant_sleep(__FILE__, __LINE__, 0); } while (0)
+#else
+# define cant_sleep() do { } while (0)
+#endif
+
+#ifndef CONFIG_PREEMPT_RT
+# define cant_migrate()		cant_sleep()
+#else
+# define cant_migrate()		do { } while (0)
+#endif
+
 /**
  * abs - return absolute value of an argument
  * @x: the value.  If it is unsigned type, it is converted to signed type first.

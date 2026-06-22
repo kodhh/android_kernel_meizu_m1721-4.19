@@ -159,6 +159,21 @@ static inline u64 ktime_get_real_ns(void)
 	return ktime_to_ns(ktime_get_real());
 }
 
+static inline u64 ktime_get_boottime_ns(void)
+{
+	return ktime_to_ns(ktime_get_boottime());
+}
+
+static inline u64 ktime_get_clocktai_ns(void)
+{
+	return ktime_to_ns(ktime_get_clocktai());
+}
+
+static inline u64 ktime_get_raw_ns(void)
+{
+	return ktime_to_ns(ktime_get_raw());
+}
+
 static inline u64 ktime_get_boot_ns(void)
 {
 	return ktime_to_ns(ktime_get_boottime());
@@ -167,11 +182,6 @@ static inline u64 ktime_get_boot_ns(void)
 static inline u64 ktime_get_tai_ns(void)
 {
 	return ktime_to_ns(ktime_get_clocktai());
-}
-
-static inline u64 ktime_get_raw_ns(void)
-{
-	return ktime_to_ns(ktime_get_raw());
 }
 
 extern u64 ktime_get_mono_fast_ns(void);
