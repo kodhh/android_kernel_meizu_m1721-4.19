@@ -1424,6 +1424,54 @@ struct dentry *mount_single(struct file_system_type *fs_type,
 }
 EXPORT_SYMBOL(mount_single);
 
+/*
+ * vfs_get_tree - Get the mountable root
+ * @fc: The superblock configuration context.
+ *
+ * The filesystem is invoked to get or create a superblock which can then later
+ * be used for mounting.  The filesystem places a pointer to the root to be
+ * used for mounting in @fc->root.
+ */
+int vfs_get_tree(struct fs_context *fc)
+{
+	struct super_block *sb;
+	int error;
+
+	if (fc->fs_type->fs_flags & FS_REQUIRES_DEV && !fc->source)
+		return -ENOENT;
+
+	if (fc->root)
+		return -EBUSY;
+
+	error = fc->ops->get_tree(fc);
+	if (error < 0)
+		return error;
+
+	if (!fc->root) {
+		pr_err("Filesystem %s get_tree() didn't set fc->root\n",
+		       fc->fs_type->name);
+		BUG();
+	}
+
+	sb = fc->root->d_sb;
+	WARN_ON(!sb->s_bdi);
+
+	smp_wmb();
+	sb->s_flags |= SB_BORN;
+
+	error = security_sb_set_mnt_opts(sb, fc->security, 0, NULL);
+	if (unlikely(error)) {
+		fc_drop_locked(fc);
+		return error;
+	}
+
+	WARN((sb->s_maxbytes < 0), "%s set sb->s_maxbytes to "
+		"negative value (%lld)\n", fc->fs_type->name, sb->s_maxbytes);
+
+	return 0;
+}
+EXPORT_SYMBOL(vfs_get_tree);
+
 struct dentry *
 mount_fs(struct file_system_type *type, int flags, const char *name, struct vfsmount *mnt, void *data)
 {
@@ -1431,6 +1479,39 @@ mount_fs(struct file_system_type *type, int flags, const char *name, struct vfsm
 	struct super_block *sb;
 	char *secdata = NULL;
 	int error = -ENOMEM;
+
+	if (type->init_fs_context) {
+		struct fs_context *fc;
+		int ret;
+
+		fc = fs_context_for_mount(type, flags);
+		if (IS_ERR(fc))
+			return ERR_CAST(fc);
+
+		if (name)
+			fc->source = kstrdup(name, GFP_KERNEL);
+		else
+			fc->source = NULL;
+
+		if (data && !(type->fs_flags & FS_BINARY_MOUNTDATA)) {
+			ret = generic_parse_monolithic(fc, data);
+			if (ret < 0) {
+				put_fs_context(fc);
+				return ERR_PTR(ret);
+			}
+		}
+
+		ret = vfs_get_tree(fc);
+		if (ret < 0) {
+			put_fs_context(fc);
+			return ERR_PTR(ret);
+		}
+
+		root = fc->root;
+		fc->root = NULL;
+		put_fs_context(fc);
+		return root;
+	}
 
 	if (data && !(type->fs_flags & FS_BINARY_MOUNTDATA)) {
 		secdata = alloc_secdata();
@@ -1454,12 +1535,6 @@ mount_fs(struct file_system_type *type, int flags, const char *name, struct vfsm
 	BUG_ON(!sb);
 	WARN_ON(!sb->s_bdi);
 
-	/*
-	 * Write barrier is for super_cache_count(). We place it before setting
-	 * SB_BORN as the data dependency between the two functions is the
-	 * superblock structure contents that we just set up, not the SB_BORN
-	 * flag.
-	 */
 	smp_wmb();
 	sb->s_flags |= SB_BORN;
 
@@ -1467,12 +1542,6 @@ mount_fs(struct file_system_type *type, int flags, const char *name, struct vfsm
 	if (error)
 		goto out_sb;
 
-	/*
-	 * filesystems should never set s_maxbytes larger than MAX_LFS_FILESIZE
-	 * but s_maxbytes was an unsigned long long for many releases. Throw
-	 * this warning for a little while to try and catch filesystems that
-	 * violate this rule.
-	 */
 	WARN((sb->s_maxbytes < 0), "%s set sb->s_maxbytes to "
 		"negative value (%lld)\n", type->name, sb->s_maxbytes);
 

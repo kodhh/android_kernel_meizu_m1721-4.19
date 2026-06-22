@@ -4985,6 +4985,13 @@ const char *page_get_link(struct dentry *dentry, struct inode *inode,
 
 EXPORT_SYMBOL(page_get_link);
 
+const char *page_get_link_raw(struct dentry *dentry, struct inode *inode,
+			      struct delayed_call *callback)
+{
+	return page_get_link(dentry, inode, callback);
+}
+EXPORT_SYMBOL_GPL(page_get_link_raw);
+
 void page_put_link(void *arg)
 {
 	put_page(arg);

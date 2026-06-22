@@ -21,7 +21,7 @@ struct kvec {
 	size_t iov_len;
 };
 
-enum {
+enum iter_type {
 	ITER_IOVEC = 0,
 	ITER_KVEC = 2,
 	ITER_BVEC = 4,
@@ -200,6 +200,16 @@ const void *dup_iter(struct iov_iter *new, struct iov_iter *old, gfp_t flags);
 static inline size_t iov_iter_count(const struct iov_iter *i)
 {
 	return i->count;
+}
+
+static inline enum iter_type iov_iter_type(const struct iov_iter *i)
+{
+	return i->type & ~(READ | WRITE);
+}
+
+static inline bool iov_iter_is_kvec(const struct iov_iter *i)
+{
+	return iov_iter_type(i) == ITER_KVEC;
 }
 
 static inline bool iter_is_iovec(const struct iov_iter *i)

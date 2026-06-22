@@ -47,6 +47,12 @@ int __generic_write_end(struct inode *inode, loff_t pos, unsigned copied,
 		struct page *page);
 
 /*
+ * fs_context.c
+ */
+extern void fc_drop_locked(struct fs_context *);
+extern struct vfsmount *vfs_create_mount(struct fs_context *);
+
+/*
  * char_dev.c
  */
 extern void __init chrdev_init(void);
