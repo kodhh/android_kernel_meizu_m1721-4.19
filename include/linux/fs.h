@@ -2666,6 +2666,7 @@ extern const struct file_operations def_chr_fops;
 extern int ioctl_by_bdev(struct block_device *, unsigned, unsigned long);
 extern int blkdev_ioctl(struct block_device *, fmode_t, unsigned, unsigned long);
 extern long compat_blkdev_ioctl(struct file *, unsigned, unsigned long);
+extern long compat_ptr_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 extern int blkdev_get(struct block_device *bdev, fmode_t mode, void *holder);
 extern struct block_device *blkdev_get_by_path(const char *path, fmode_t mode,
 					       void *holder);

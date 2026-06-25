@@ -366,8 +366,17 @@ struct vfs_ns_cap_data {
 
 #define CAP_AUDIT_READ		37
 
+/* Allow performance monitoring via perf_event_open system calls */
 
-#define CAP_LAST_CAP         CAP_AUDIT_READ
+#define CAP_PERFMON		38
+
+/* Allow BPF subsystem operations */
+
+#define CAP_BPF			39
+
+
+#define CAP_LAST_CAP         CAP_BPF
+
 
 #define cap_valid(x) ((x) >= 0 && (x) <= CAP_LAST_CAP)
 
